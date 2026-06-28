@@ -44,6 +44,22 @@
   window._firebaseReady = true;
   window.dispatchEvent(new Event('firebaseReady'));
 </script>
+<script>
+  // Fallback: se o módulo Firebase não carregar em 6s, mostrar erro
+  setTimeout(function() {
+    if (!window._firebaseReady) {
+      var root = document.getElementById('root');
+      if (root && root.innerHTML === '') {
+        root.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:system-ui;padding:2rem;text-align:center;">' +
+          '<div style="font-size:40px;margin-bottom:1rem">☕</div>' +
+          '<div style="font-size:18px;font-weight:700;color:#8B1A4A;margin-bottom:0.5rem">Café & Tal</div>' +
+          '<div style="font-size:14px;color:#7A5C4A;margin-bottom:1.5rem">Verifique sua conexão com a internet e recarregue.</div>' +
+          '<button onclick="location.reload()" style="background:#8B1A4A;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:14px;cursor:pointer">Tentar novamente</button>' +
+          '</div>';
+      }
+    }
+  }, 6000);
+</script>
 <style>
   :root {
     --wine: #8B1A4A; --wine-dark: #6B1238; --wine-light: #B02560;
@@ -2095,9 +2111,18 @@ function App() {
   const [syncing, setSyncing] = useState(false);
 
   useEffect(()=>{
-    if(!ready){
-      window.addEventListener('firebaseReady',()=>setReady(true),{once:true});
+    // Firebase pode já ter carregado antes do React montar
+    if(window._firebaseReady){
+      setReady(true);
+      return;
     }
+    const handler = () => setReady(true);
+    window.addEventListener('firebaseReady', handler, {once:true});
+    // Timeout de segurança: tenta de novo após 3s
+    const t = setTimeout(()=>{
+      if(window._firebaseReady) setReady(true);
+    }, 3000);
+    return () => { clearTimeout(t); window.removeEventListener('firebaseReady', handler); };
   },[]);
 
   const pages=[
@@ -2113,9 +2138,10 @@ function App() {
   ];
 
   if(!ready) return (
-    <div className="loading-screen" style={{height:'100vh'}}>
+    <div className="loading-screen" style={{height:'100vh',flexDirection:'column',gap:'1rem'}}>
       <div className="spinner"/>
-      <span style={{color:'var(--text-muted)'}}>Conectando ao Firebase...</span>
+      <span style={{color:'var(--text-muted)',fontSize:14}}>Conectando...</span>
+      <span style={{color:'var(--text-muted)',fontSize:12,opacity:0.6}}>Aguarde ou verifique sua conexão</span>
     </div>
   );
 

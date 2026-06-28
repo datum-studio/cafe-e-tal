@@ -1054,7 +1054,7 @@ function Feirinha({ syncing, setSyncing }) {
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
   const { arr: feirasCadastro } = useFirestore('feiras_cadastro');
   const [tab, setTab] = useState('nova');
-  const [form, setForm] = useState({data:hoje(),local:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}],inscricao:''});
+  const [form, setForm] = useState({participacao_id:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
   const [alert, setAlert] = useState(null);
 
   function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
@@ -1075,17 +1075,28 @@ function Feirinha({ syncing, setSyncing }) {
   }
 
   async function salvar() {
-    if(!form.local) return showAlert('danger','Selecione o evento/feira.');
+    if(!form.participacao_id) return showAlert('danger','Selecione a participação.');
     if(form.itens.some(it=>!it.produto_id||!it.qtd||!it.preco_unitario)) return showAlert('danger','Preencha todos os itens.');
     setSyncing(true);
     try {
       const id=uid();
-      await saveDoc('feirinha',id,{...form,total:calcTotal(form.itens),lucro:calcLucro(form.itens,form.inscricao),inscricao:parseFloat(form.inscricao)||0,criado_em:new Date().toISOString()});
+      const part = participacoes.find(p=>p.id===form.participacao_id);
+      await saveDoc('feirinha',id,{
+        ...form,
+        participacao_id: form.participacao_id,
+        feira_nome: part?.feira_nome||'',
+        data: part?.data_inicio||hoje(),
+        data_fim: part?.data_fim||part?.data_inicio||hoje(),
+        local: part?.feira_nome||(part?.feira_local||''),
+        total: calcTotal(form.itens),
+        lucro: calcLucro(form.itens, 0),
+        criado_em: new Date().toISOString(),
+      });
       for(const it of form.itens){
         const atual=estoqueFeirinha[it.produto_id]?.qtd||0;
         await saveDoc('estoque_feirinha',it.produto_id,{qtd:Math.max(0,atual-(parseInt(it.qtd)||0))});
       }
-      setForm({data:hoje(),local:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
+      setForm({participacao_id:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
       showAlert('success','Venda registrada!');
       setTab('historico');
     } catch(e){showAlert('danger','Erro ao salvar.');}
@@ -1101,7 +1112,16 @@ function Feirinha({ syncing, setSyncing }) {
 
   const prodAtivos=produtos.filter(p=>p.ativo);
   const totalFeiras=feirinha.reduce((a,f)=>a+f.total,0);
-  const lucroFeiras=feirinha.reduce((a,f)=>a+f.lucro,0);
+  const inscricoesContadas=new Set();
+  const totalInscricoes=feirinha.reduce((a,f)=>{
+    if(f.participacao_id&&!inscricoesContadas.has(f.participacao_id)){
+      inscricoesContadas.add(f.participacao_id);
+      const part=participacoes.find(p=>p.id===f.participacao_id);
+      return a+(part?.inscricao||0);
+    }
+    return a;
+  },0);
+  const lucroFeiras=Math.max(0,feirinha.reduce((a,f)=>a+(f.lucro||0),0)-totalInscricoes);
 
   if(loading) return <div className="loading-screen"><div className="spinner"/></div>;
 
@@ -1124,18 +1144,25 @@ function Feirinha({ syncing, setSyncing }) {
           <div className="card-title">Venda na feira</div>
           <div className="form-row cols2">
             <div className="field"><label>Data</label><input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))}/></div>
-            <div className="field"><label>Feira / Evento</label>
-              <select value={form.local} onChange={e=>setForm(f=>({...f,local:e.target.value}))}>
-                <option value="">Selecionar evento...</option>
-                {[...feirasCadastro].sort((a,b)=>a.nome.localeCompare(b.nome)).map(f=>(
-                  <option key={f.id} value={f.nome}>{f.nome}{f.local?' — '+f.local:''}</option>
-                ))}
+            <div className="field"><label>Participação na feira</label>
+              <select value={form.participacao_id} onChange={e=>setForm(f=>({...f,participacao_id:e.target.value}))}>
+                <option value="">Selecionar participação...</option>
+                {[...participacoes].sort((a,b)=>b.data_inicio.localeCompare(a.data_inicio)).map(p=>{
+                  const ini=p.data_inicio?.split('-').reverse().join('/');
+                  const fim=p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:'' ;
+                  return <option key={p.id} value={p.id}>{p.feira_nome} · {ini}{fim} · insc. {fmt(p.inscricao)}</option>;
+                })}
               </select>
             </div>
-          <div className="field"><label>Custo de inscrição (R$)</label>
-              <input type="number" step="0.01" min="0" value={form.inscricao} onChange={e=>setForm(f=>({...f,inscricao:e.target.value}))} placeholder="0,00 — deixe vazio se não houver"/>
-            </div>
           </div>
+          {(()=>{
+            const part=participacoes.find(p=>p.id===form.participacao_id);
+            return part&&part.inscricao>0?(
+              <div style={{fontSize:12,color:'var(--danger)',padding:'4px 0 8px',borderTop:'1px dashed var(--border)'}}>
+                Inscrição desta participação: <strong>{fmt(part.inscricao)}</strong> — será descontada do lucro
+              </div>
+            ):null;
+          })()}
           <div className="separator"/>
           <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS VENDIDOS</div>
           {form.itens.map((it,i)=>(
@@ -1162,10 +1189,7 @@ function Feirinha({ syncing, setSyncing }) {
           ))}
           <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={addItem}>+ Adicionar item</button>
           <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens))}</span></div>
-                    {(parseFloat(form.inscricao)||0)>0&&(
-            <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Inscrição</span><span style={{color:'var(--danger)',fontSize:13}}>− {fmt(parseFloat(form.inscricao)||0)}</span></div>
-          )}
-          <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Lucro estimado</span><span style={{color:'var(--success)',fontSize:13,fontWeight:600}}>{fmt(calcLucro(form.itens,form.inscricao))}</span></div>
+                    <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Lucro estimado (vendas)</span><span style={{color:'var(--success)',fontSize:13,fontWeight:600}}>{fmt(calcLucro(form.itens,0))}</span></div>
           <div className="separator"/>
           <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
         </div>
@@ -1174,28 +1198,55 @@ function Feirinha({ syncing, setSyncing }) {
       {tab==='historico'&&(
         <div className="card">
           {feirinha.length===0&&<div className="empty-state">Nenhuma venda na feirinha registrada</div>}
-          {[...feirinha].sort((a,b)=>b.data?.localeCompare(a.data)).map(f=>(
-            <div key={f.id} style={{borderBottom:'1px solid var(--cream-dark)',paddingBottom:12,marginBottom:12}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:8}}>
-                <div>
-                  <div style={{fontWeight:700}}>{f.local}</div>
-                  <div style={{fontSize:12,color:'var(--text-muted)'}}>{f.data}</div>
-                  <div style={{fontSize:12,marginTop:4}}>
-                    {f.itens?.map((it,i)=>{
-                      const p=produtos.find(x=>x.id===it.produto_id);
-                      return <span key={i} style={{marginRight:8}}>{p?.nome||'?'} ×{it.qtd}</span>;
-                    })}
+          {(()=>{
+            // Agrupar por participacao_id
+            const grupos={};
+            feirinha.forEach(v=>{
+              const key=v.participacao_id||v.local||'sem-participacao';
+              if(!grupos[key]) grupos[key]={vendas:[],part:participacoes.find(p=>p.id===v.participacao_id)||null};
+              grupos[key].vendas.push(v);
+            });
+            return Object.entries(grupos).sort((a,b)=>{
+              const da=a[1].vendas[0]?.data||'';
+              const db=b[1].vendas[0]?.data||'';
+              return db.localeCompare(da);
+            }).map(([key,{vendas:vs,part}])=>{
+              const totalVendas=vs.reduce((a,v)=>a+v.total,0);
+              const lucroVendas=vs.reduce((a,v)=>a+(v.lucro||0),0);
+              const inscricao=part?.inscricao||0;
+              const lucroLiquido=Math.max(0,lucroVendas-inscricao);
+              const titulo=part?`${part.feira_nome} · ${part.data_inicio.split('-').reverse().join('/')}${part.data_fim&&part.data_fim!==part.data_inicio?' a '+part.data_fim.split('-').reverse().join('/'):''}`:vs[0]?.local||'Sem evento';
+              return (
+                <div key={key} style={{marginBottom:16,paddingBottom:16,borderBottom:'1px solid var(--cream-dark)'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:8,marginBottom:8}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:14}}>{titulo}</div>
+                      <div style={{fontSize:12,color:'var(--text-muted)'}}>{vs.length} venda{vs.length!==1?'s':''}</div>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontWeight:700,color:'var(--wine)'}}>{fmt(totalVendas)}</div>
+                      {inscricao>0&&<div style={{fontSize:12,color:'var(--danger)'}}>inscrição − {fmt(inscricao)}</div>}
+                      <div style={{fontSize:12,color:'var(--success)',fontWeight:600}}>lucro líquido {fmt(lucroLiquido)}</div>
+                    </div>
                   </div>
+                  {vs.map(v=>(
+                    <div key={v.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0 4px 12px',borderLeft:'2px solid var(--cream-dark)',marginBottom:4,flexWrap:'wrap',gap:4}}>
+                      <div style={{fontSize:12}}>
+                        <span style={{color:'var(--text-muted)'}}>{v.data}</span>
+                        <span style={{marginLeft:8}}>
+                          {v.itens?.map((it,i)=>{const p=produtos.find(x=>x.id===it.produto_id);return <span key={i} style={{marginRight:6}}>{p?.nome||'?'} ×{it.qtd}</span>;})}
+                        </span>
+                      </div>
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        <span style={{fontSize:13,fontWeight:600,color:'var(--wine)'}}>{fmt(v.total)}</span>
+                        <button className="btn btn-danger btn-sm" onClick={()=>excluir(v.id)}>✕</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div style={{textAlign:'right'}}>
-                  <div style={{fontWeight:700,color:'var(--wine)'}}>{fmt(f.total)}</div>
-                  {f.inscricao>0&&<div style={{fontSize:12,color:'var(--danger)'}}>inscrição − {fmt(f.inscricao)}</div>}
-                  <div style={{fontSize:12,color:'var(--success)'}}>lucro líquido {fmt(f.lucro)}</div>
-                  <button className="btn btn-danger btn-sm" style={{marginTop:4}} onClick={()=>excluir(f.id)}>Excluir</button>
-                </div>
-              </div>
-            </div>
-          ))}
+              );
+            });
+          })()}
         </div>
       )}
     </div>
@@ -1476,6 +1527,7 @@ function Dashboard({ syncing, setSyncing }) {
   const { arr: produtos } = useFirestore('produtos');
   const { arr: vendas } = useFirestore('vendas');
   const { arr: feirinha } = useFirestore('feirinha');
+  const { arr: participacoes } = useFirestore('participacoes');
   const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
   const { arr: vendedores } = useFirestore('vendedores');
@@ -1537,7 +1589,17 @@ function Dashboard({ syncing, setSyncing }) {
   const totalVendas=vendasFiltradas.reduce((a,v)=>a+v.total,0);
   const lucroDelivery=vendasFiltradas.reduce((a,v)=>a+(v.lucro||0),0);
   const totalFeiras=feirasFiltradas.reduce((a,f)=>a+f.total,0);
-  const lucroFeiras=feirasFiltradas.reduce((a,f)=>a+(f.lucro||0),0);
+  const lucroFeirasBase=feirasFiltradas.reduce((a,f)=>a+(f.lucro||0),0);
+  const partContadas=new Set();
+  const totalInscricoesDash=feirasFiltradas.reduce((a,f)=>{
+    if(f.participacao_id&&!partContadas.has(f.participacao_id)){
+      partContadas.add(f.participacao_id);
+      const part=participacoes.find(p=>p.id===f.participacao_id);
+      return a+(part?.inscricao||0);
+    }
+    return a;
+  },0);
+  const lucroFeiras=Math.max(0,lucroFeirasBase-totalInscricoesDash);
   const totalGeral=totalVendas+totalFeiras;
   const totalLucro=lucroDelivery+lucroFeiras;
   const pendentes=vendasFiltradas.filter(v=>v.status==='pendente').reduce((a,v)=>a+v.total,0);
@@ -1695,24 +1757,27 @@ function Cadastros({ syncing, setSyncing }) {
 // ── FEIRAS TAB ────────────────────────────────────────────────────
 function FeirasTab({ syncing, setSyncing }) {
   const { arr: feiras, loading } = useFirestore('feiras_cadastro');
+  const { arr: participacoes } = useFirestore('participacoes');
   const [form, setForm] = useState({ nome: '', local: '', recorrente: false });
   const [editando, setEditando] = useState(null);
+  const [partForm, setPartForm] = useState({ feira_id: '', data_inicio: hoje(), data_fim: '', inscricao: '' });
+  const [editandoPart, setEditandoPart] = useState(null);
+  const [feiraAberta, setFeiraAberta] = useState(null);
   const [alert, setAlert] = useState(null);
 
-  function showAlert(tipo, msg) { setAlert({tipo, msg}); setTimeout(() => setAlert(null), 2500); }
+  function showAlert(tipo, msg) { setAlert({tipo, msg}); setTimeout(() => setAlert(null), 3000); }
 
-  async function salvar() {
+  async function salvarFeira() {
     const nome = form.nome.trim();
-    const local = form.local.trim();
     if (!nome) return showAlert('danger', 'Informe o nome da feira.');
     setSyncing(true);
-    await saveDoc('feiras_cadastro', uid(), { nome, local, recorrente: form.recorrente });
+    await saveDoc('feiras_cadastro', uid(), { nome, local: form.local.trim(), recorrente: form.recorrente });
     setForm({ nome: '', local: '', recorrente: false });
     showAlert('success', 'Feira cadastrada!');
     setSyncing(false);
   }
 
-  async function salvarEdicao() {
+  async function salvarEdicaoFeira() {
     if (!editando.nome.trim()) return showAlert('danger', 'Informe o nome.');
     setSyncing(true);
     await saveDoc('feiras_cadastro', editando.id, { nome: editando.nome.trim(), local: editando.local.trim(), recorrente: editando.recorrente });
@@ -1721,11 +1786,58 @@ function FeirasTab({ syncing, setSyncing }) {
     setSyncing(false);
   }
 
-  async function excluir(id) {
+  async function excluirFeira(id) {
+    const temPart = participacoes.some(p => p.feira_id === id);
+    if (temPart) return showAlert('danger', 'Remova as participações antes de excluir.');
     if (!confirm('Excluir feira?')) return;
     setSyncing(true);
     await deleteDocById('feiras_cadastro', id);
     setSyncing(false);
+  }
+
+  async function salvarParticipacao() {
+    if (!partForm.feira_id) return showAlert('danger', 'Selecione a feira.');
+    if (!partForm.data_inicio) return showAlert('danger', 'Informe a data de início.');
+    if (!partForm.inscricao) return showAlert('danger', 'Informe o custo de inscrição (0 se gratuito).');
+    setSyncing(true);
+    const feira = feiras.find(f => f.id === partForm.feira_id);
+    await saveDoc('participacoes', uid(), {
+      feira_id: partForm.feira_id,
+      feira_nome: feira?.nome || '',
+      feira_local: feira?.local || '',
+      data_inicio: partForm.data_inicio,
+      data_fim: partForm.data_fim || partForm.data_inicio,
+      inscricao: parseFloat(partForm.inscricao) || 0,
+    });
+    setPartForm({ feira_id: '', data_inicio: hoje(), data_fim: '', inscricao: '' });
+    showAlert('success', 'Participação cadastrada!');
+    setSyncing(false);
+  }
+
+  async function salvarEdicaoPart() {
+    if (!editandoPart.data_inicio) return showAlert('danger', 'Informe a data de início.');
+    setSyncing(true);
+    await saveDoc('participacoes', editandoPart.id, {
+      ...editandoPart,
+      data_fim: editandoPart.data_fim || editandoPart.data_inicio,
+      inscricao: parseFloat(editandoPart.inscricao) || 0,
+    });
+    setEditandoPart(null);
+    showAlert('success', 'Participação atualizada!');
+    setSyncing(false);
+  }
+
+  async function excluirParticipacao(id) {
+    if (!confirm('Excluir participação?')) return;
+    setSyncing(true);
+    await deleteDocById('participacoes', id);
+    setSyncing(false);
+  }
+
+  function labelParticipacao(p) {
+    const ini = p.data_inicio?.split('-').reverse().join('/');
+    const fim = p.data_fim && p.data_fim !== p.data_inicio ? p.data_fim.split('-').reverse().join('/') : null;
+    return `${p.feira_nome}${fim ? ` · ${ini} a ${fim}` : ` · ${ini}`} · ${fmt(p.inscricao)}`;
   }
 
   if (loading) return <div className="loading-screen"><div className="spinner"/></div>;
@@ -1733,17 +1845,19 @@ function FeirasTab({ syncing, setSyncing }) {
   return (
     <div>
       {alert && <div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+
+      {/* Cadastro de feira */}
       <div className="card">
         <div className="card-title">Nova feira / evento</div>
         <div className="form-row cols2">
           <div className="field"><label>Nome</label><input value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} placeholder="Ex: Feira da Orla"/></div>
-          <div className="field"><label>Local / endereço</label><input value={form.local} onChange={e=>setForm(f=>({...f,local:e.target.value}))} placeholder="Ex: Orla de Juazeiro"/></div>
+          <div className="field"><label>Local</label><input value={form.local} onChange={e=>setForm(f=>({...f,local:e.target.value}))} placeholder="Ex: Orla de Juazeiro"/></div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
           <label className="toggle"><input type="checkbox" checked={form.recorrente} onChange={e=>setForm(f=>({...f,recorrente:e.target.checked}))}/><span className="toggle-slider"/></label>
-          <span style={{fontSize:13,color:'var(--text-muted)'}}>Feira recorrente (aparece sempre na lista)</span>
+          <span style={{fontSize:13,color:'var(--text-muted)'}}>Feira recorrente</span>
         </div>
-        <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Cadastrar</button>
+        <button className="btn btn-primary" onClick={salvarFeira} disabled={syncing}>Cadastrar feira</button>
       </div>
 
       {editando && (
@@ -1758,40 +1872,94 @@ function FeirasTab({ syncing, setSyncing }) {
             <span style={{fontSize:13,color:'var(--text-muted)'}}>Recorrente</span>
           </div>
           <div style={{display:'flex',gap:8}}>
-            <button className="btn btn-gold" onClick={salvarEdicao} disabled={syncing}>Salvar</button>
+            <button className="btn btn-gold" onClick={salvarEdicaoFeira} disabled={syncing}>Salvar</button>
             <button className="btn btn-ghost" onClick={()=>setEditando(null)}>Cancelar</button>
           </div>
         </div>
       )}
 
+      {/* Lista de feiras */}
       <div className="card">
+        <div className="card-title">Feiras cadastradas</div>
         {feiras.length === 0
-          ? <div className="empty-state">Nenhuma feira cadastrada.<br/>Cadastre os eventos para agilizar o registro de vendas.</div>
-          : (
-            <table>
-              <thead><tr><th>Nome</th><th>Local</th><th>Tipo</th><th></th></tr></thead>
-              <tbody>
-                {[...feiras].sort((a,b)=>a.nome.localeCompare(b.nome)).map(f=>(
-                  <tr key={f.id}>
-                    <td style={{fontWeight:600}}>{f.nome}</td>
-                    <td style={{color:'var(--text-muted)'}}>{f.local||'—'}</td>
-                    <td><span className={`badge ${f.recorrente?'badge-wine':'badge-gold'}`}>{f.recorrente?'Recorrente':'Pontual'}</span></td>
-                    <td style={{display:'flex',gap:4}}>
+          ? <div className="empty-state">Nenhuma feira cadastrada.</div>
+          : [...feiras].sort((a,b)=>a.nome.localeCompare(b.nome)).map(f => {
+              const parts = participacoes.filter(p => p.feira_id === f.id).sort((a,b)=>b.data_inicio.localeCompare(a.data_inicio));
+              const aberta = feiraAberta === f.id;
+              return (
+                <div key={f.id} style={{marginBottom:12,borderBottom:'1px solid var(--cream-dark)',paddingBottom:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                    <div>
+                      <span style={{fontWeight:700}}>{f.nome}</span>
+                      {f.local&&<span style={{fontSize:12,color:'var(--text-muted)',marginLeft:8}}>{f.local}</span>}
+                      {f.recorrente&&<span className="badge badge-wine" style={{marginLeft:8}}>Recorrente</span>}
+                    </div>
+                    <div style={{display:'flex',gap:4}}>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setFeiraAberta(aberta?null:f.id)}>
+                        {aberta?'▲':'▼'} {parts.length} participaç{parts.length!==1?'ões':'ão'}
+                      </button>
                       <button className="btn btn-ghost btn-sm" onClick={()=>setEditando({...f})}>✏</button>
-                      <button className="btn btn-danger btn-sm" onClick={()=>excluir(f.id)}>✕</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
+                      <button className="btn btn-danger btn-sm" onClick={()=>excluirFeira(f.id)}>✕</button>
+                    </div>
+                  </div>
+                  {aberta && (
+                    <div style={{marginTop:10,paddingLeft:12,borderLeft:'3px solid var(--cream-dark)'}}>
+                      {parts.length===0
+                        ? <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:8}}>Nenhuma participação ainda.</div>
+                        : parts.map(p=>(
+                          <div key={p.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--cream-dark)',flexWrap:'wrap',gap:6}}>
+                            {editandoPart?.id===p.id ? (
+                              <div style={{width:'100%'}}>
+                                <div className="form-row cols3" style={{marginBottom:6}}>
+                                  <div className="field"><label>Início</label><input type="date" value={editandoPart.data_inicio} onChange={e=>setEditandoPart(x=>({...x,data_inicio:e.target.value}))}/></div>
+                                  <div className="field"><label>Fim</label><input type="date" value={editandoPart.data_fim} onChange={e=>setEditandoPart(x=>({...x,data_fim:e.target.value}))}/></div>
+                                  <div className="field"><label>Inscrição (R$)</label><input type="number" step="0.01" value={editandoPart.inscricao} onChange={e=>setEditandoPart(x=>({...x,inscricao:e.target.value}))}/></div>
+                                </div>
+                                <div style={{display:'flex',gap:6}}>
+                                  <button className="btn btn-gold btn-sm" onClick={salvarEdicaoPart} disabled={syncing}>Salvar</button>
+                                  <button className="btn btn-ghost btn-sm" onClick={()=>setEditandoPart(null)}>Cancelar</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div style={{fontSize:13}}>
+                                  <span style={{fontWeight:600}}>
+                                    {p.data_inicio.split('-').reverse().join('/')}
+                                    {p.data_fim&&p.data_fim!==p.data_inicio&&` a ${p.data_fim.split('-').reverse().join('/')}`}
+                                  </span>
+                                  <span style={{color:'var(--danger)',marginLeft:8}}>inscrição: {fmt(p.inscricao)}</span>
+                                </div>
+                                <div style={{display:'flex',gap:4}}>
+                                  <button className="btn btn-ghost btn-sm" onClick={()=>setEditandoPart({...p})}>✏</button>
+                                  <button className="btn btn-danger btn-sm" onClick={()=>excluirParticipacao(p.id)}>✕</button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))
+                      }
+                      {/* Form nova participação inline */}
+                      <div style={{marginTop:10,paddingTop:8,borderTop:'1px dashed var(--border)'}}>
+                        <div style={{fontSize:12,fontWeight:700,color:'var(--text-muted)',marginBottom:6}}>NOVA PARTICIPAÇÃO</div>
+                        <div className="form-row cols3">
+                          <div className="field"><label>Início</label><input type="date" value={partForm.feira_id===f.id?partForm.data_inicio:hoje()} onChange={e=>setPartForm(p=>({...p,feira_id:f.id,data_inicio:e.target.value}))}/></div>
+                          <div className="field"><label>Fim (opcional)</label><input type="date" value={partForm.feira_id===f.id?partForm.data_fim:''} onChange={e=>setPartForm(p=>({...p,feira_id:f.id,data_fim:e.target.value}))}/></div>
+                          <div className="field"><label>Inscrição (R$)</label><input type="number" step="0.01" min="0" value={partForm.feira_id===f.id?partForm.inscricao:''} onChange={e=>setPartForm(p=>({...p,feira_id:f.id,inscricao:e.target.value}))} placeholder="0,00"/></div>
+                        </div>
+                        <button className="btn btn-primary btn-sm" onClick={()=>{setPartForm(p=>({...p,feira_id:f.id}));salvarParticipacao();}} disabled={syncing}>+ Adicionar participação</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
         }
       </div>
     </div>
   );
 }
 
-// ── CIDADES TAB ───────────────────────────────────────────────────
+
 function CidadesTab({ syncing, setSyncing }) {
 
   const { arr: cidades, loading } = useFirestore('cidades');

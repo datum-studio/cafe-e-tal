@@ -1288,17 +1288,31 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
     [participacoes, feiraId]
   );
 
-  // Resultado da participação ou feira selecionada
   const resultado = useMemo(() => {
+    if (!feiraId && !partId) return null;
+
+    // Participações alvo
     const partsAlvo = partId
       ? participacoes.filter(p => p.id === partId)
       : partsDaFeira;
-    if (!partsAlvo.length && !feiraId) return null;
-
     const partIds = new Set(partsAlvo.map(p => p.id));
-    const vendasFiltradas = feirinha.filter(v => partIds.has(v.participacao_id));
 
-    // Produtos
+    // Nome da feira selecionada (para fallback de dados legados)
+    const feiraObj = feirasCadastro.find(f => f.id === feiraId);
+    const fairaNome = feiraObj?.nome || '';
+
+    // Vendas filtradas — inclui dados novos (por participacao_id) e legados (por feira_nome)
+    const vendasFiltradas = feirinha.filter(v => {
+      if (partId) return v.participacao_id === partId;
+      if (partIds.has(v.participacao_id)) return true;
+      // fallback para dados legados sem participacao_id
+      if (!v.participacao_id && fairaNome && v.feira_nome === fairaNome) return true;
+      return false;
+    });
+
+    if (!vendasFiltradas.length) return { itens: [], totalVendas: 0, lucroBase: 0, totalInscricoes: 0, lucroLiquido: 0, qtdRegistros: 0, porPart: [] };
+
+    // Contagem de produtos
     const contagem = {};
     vendasFiltradas.forEach(v => v.itens?.forEach(it => {
       if (!contagem[it.produto_id]) contagem[it.produto_id] = { qtd: 0, total: 0 };
@@ -1314,7 +1328,7 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
     const totalVendas = vendasFiltradas.reduce((a,v) => a + v.total, 0);
     const lucroBase = vendasFiltradas.reduce((a,v) => a + (v.lucro||0), 0);
 
-    // Inscrições deduzidas uma vez por participação
+    // Inscrições deduzidas por participação (uma vez cada)
     const contadas = new Set();
     const totalInscricoes = vendasFiltradas.reduce((a,v) => {
       if (v.participacao_id && !contadas.has(v.participacao_id)) {
@@ -1326,40 +1340,32 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
     }, 0);
     const lucroLiquido = Math.max(0, lucroBase - totalInscricoes);
 
-    // Por participação (para comparativo)
+    // Comparativo por participação
     const porPart = partsAlvo.map(p => {
-      const vs = feirinha.filter(v => v.participacao_id === p.id);
+      const vs = vendasFiltradas.filter(v => v.participacao_id === p.id);
+      if (!vs.length) return null;
       const tot = vs.reduce((a,v) => a + v.total, 0);
       const luc = Math.max(0, vs.reduce((a,v) => a + (v.lucro||0), 0) - (p.inscricao||0));
       const ini = p.data_inicio?.split('-').reverse().join('/');
       const fim = p.data_fim&&p.data_fim!==p.data_inicio ? ` a ${p.data_fim.split('-').reverse().join('/')}` : '';
       return { label: `${ini}${fim}`, total: tot, lucro: luc, inscricao: p.inscricao||0, qtd: vs.length };
-    }).filter(p => p.qtd > 0).sort((a,b) => b.total - a.total);
+    }).filter(Boolean).sort((a,b) => b.total - a.total);
 
     return { itens, totalVendas, lucroBase, totalInscricoes, lucroLiquido, qtdRegistros: vendasFiltradas.length, porPart };
-  }, [partId, feiraId, feirinha, participacoes, partsDaFeira, produtos]);
+  }, [partId, feiraId, feirinha, participacoes, partsDaFeira, produtos, feirasCadastro]);
 
   function textoWhats() {
     if (!resultado) return '';
     const feira = feirasCadastro.find(f => f.id === feiraId);
-    let t = `🏪 *RELATÓRIO DE FEIRA*
-`;
-    if (feira) t += `*${feira.nome}*
-`;
-    t += `━━━━━━━━━━━━━━━━━━━━
-`;
-    t += `📦 *O que foi vendido:*
-`;
-    resultado.itens.forEach(it => { t += `• ${it.nome}: ${it.qtd} un — ${fmt(it.total)}
-`; });
-    t += `━━━━━━━━━━━━━━━━━━━━
-`;
-    t += `💰 Faturamento: ${fmt(resultado.totalVendas)}
-`;
-    if (resultado.totalInscricoes > 0) t += `📋 Inscrição(ões): − ${fmt(resultado.totalInscricoes)}
-`;
-    t += `✅ Lucro líquido: ${fmt(resultado.lucroLiquido)}
-`;
+    let t = `🏪 *RELATÓRIO DE FEIRA*\n`;
+    if (feira) t += `*${feira.nome}*\n`;
+    t += `━━━━━━━━━━━━━━━━━━━━\n`;
+    t += `📦 *O que foi vendido:*\n`;
+    resultado.itens.forEach(it => { t += `• ${it.nome}: ${it.qtd} un — ${fmt(it.total)}\n`; });
+    t += `━━━━━━━━━━━━━━━━━━━━\n`;
+    t += `💰 Faturamento: ${fmt(resultado.totalVendas)}\n`;
+    if (resultado.totalInscricoes > 0) t += `📋 Inscrição(ões): − ${fmt(resultado.totalInscricoes)}\n`;
+    t += `✅ Lucro líquido: ${fmt(resultado.lucroLiquido)}\n`;
     return t;
   }
 
@@ -1369,25 +1375,25 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
         <div className="field">
           <label>Feira</label>
           <select value={feiraId} onChange={e=>{setFeiraId(e.target.value);setPartId('');}}>
-            <option value="">Todas as feiras</option>
+            <option value="">Selecione uma feira...</option>
             {feirasCadastro.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
           </select>
         </div>
         <div className="field">
-          <label>Participação específica</label>
-          <select value={partId} onChange={e=>setPartId(e.target.value)}>
+          <label>Participação específica (opcional)</label>
+          <select value={partId} onChange={e=>setPartId(e.target.value)} disabled={!feiraId}>
             <option value="">Todas as participações</option>
             {partsDaFeira.map(p=>{
-              const ini=p.data_inicio?.split('-').reverse().join('/');
-              const fim=p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:'' ;
-              return <option key={p.id} value={p.id}>{ini}{fim}</option>;
+              const ini = p.data_inicio?.split('-').reverse().join('/');
+              const fim = p.data_fim&&p.data_fim!==p.data_inicio ? ` a ${p.data_fim.split('-').reverse().join('/')}` : '';
+              return <option key={p.id} value={p.id}>{ini}{fim} · insc. {fmt(p.inscricao)}</option>;
             })}
           </select>
         </div>
       </div>
 
-      {!resultado && <div className="empty-state" style={{marginTop:16}}>Selecione uma feira acima para ver o relatório.</div>}
-      {resultado && resultado.itens.length === 0 && <div className="empty-state">Nenhuma venda encontrada para essa seleção.</div>}
+      {!feiraId && <div className="empty-state" style={{marginTop:16}}>Selecione uma feira acima para ver o relatório.</div>}
+      {feiraId && resultado && resultado.itens.length === 0 && <div className="empty-state">Nenhuma venda encontrada para essa seleção.</div>}
 
       {resultado && resultado.itens.length > 0 && (
         <>
@@ -1448,7 +1454,6 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
 }
 
 
-// ── RELATÓRIO ─────────────────────────────────────────────────────
 function Relatorio() {
   const { arr: produtos } = useFirestore('produtos');
   const { arr: vendedores } = useFirestore('vendedores');

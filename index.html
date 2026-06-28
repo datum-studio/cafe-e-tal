@@ -1485,8 +1485,41 @@ function Cidades({ syncing, setSyncing }) {
   const [nome, setNome] = useState('');
   const [editando, setEditando] = useState(null);
   const [alert, setAlert] = useState(null);
+  const [importando, setImportando] = useState(false);
 
   function showAlert(tipo, msg) { setAlert({tipo, msg}); setTimeout(() => setAlert(null), 2500); }
+
+  // Detectar cidades nos compradores que ainda não estão no cadastro
+  const cidadesNaoCadastradas = useMemo(() => {
+    const cadastradas = new Set(cidades.map(c => c.nome.toLowerCase().trim()));
+    const encontradas = new Set();
+    compradores.forEach(c => {
+      const cidade = c.cidade?.trim();
+      if (cidade && !cadastradas.has(cidade.toLowerCase())) {
+        encontradas.add(cidade);
+      }
+    });
+    return [...encontradas].sort();
+  }, [cidades, compradores]);
+
+  async function importarTodasCidades() {
+    if (cidadesNaoCadastradas.length === 0) return;
+    setImportando(true);
+    setSyncing(true);
+    for (const cidade of cidadesNaoCadastradas) {
+      await saveDoc('cidades', uid(), { nome: cidade });
+    }
+    setSyncing(false);
+    setImportando(false);
+    showAlert('success', `${cidadesNaoCadastradas.length} cidade(s) importada(s) com sucesso!`);
+  }
+
+  async function importarUmaCidade(cidade) {
+    setSyncing(true);
+    await saveDoc('cidades', uid(), { nome: cidade });
+    setSyncing(false);
+    showAlert('success', `"${cidade}" importada!`);
+  }
 
   async function salvar() {
     const nomeLimpo = nome.trim();
@@ -1532,6 +1565,35 @@ function Cidades({ syncing, setSyncing }) {
     <div>
       <div className="page-title">📍 Cidades</div>
       {alert && <div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+
+      {cidadesNaoCadastradas.length > 0 && (
+        <div className="card" style={{borderLeft:'4px solid var(--warning)',background:'#FFFBF0'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:8,marginBottom:12}}>
+            <div>
+              <div style={{fontWeight:700,color:'var(--warning)',marginBottom:2}}>⚠ Cidades detectadas nos compradores</div>
+              <div style={{fontSize:13,color:'var(--text-muted)'}}>
+                {cidadesNaoCadastradas.length} cidade(s) usada(s) em compradores ainda não estão no cadastro.<br/>
+                Importe-as para garantir o funcionamento correto do módulo de Produção.
+              </div>
+            </div>
+            <button className="btn btn-gold" onClick={importarTodasCidades} disabled={importando||syncing}>
+              {importando ? 'Importando...' : `Importar todas (${cidadesNaoCadastradas.length})`}
+            </button>
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+            {cidadesNaoCadastradas.map(c => (
+              <div key={c} style={{display:'flex',alignItems:'center',gap:6,background:'var(--warning-bg)',borderRadius:7,padding:'4px 10px'}}>
+                <span style={{fontSize:13,fontWeight:600,color:'var(--warning)'}}>{c}</span>
+                <button
+                  onClick={()=>importarUmaCidade(c)}
+                  disabled={syncing}
+                  style={{background:'none',border:'none',cursor:'pointer',color:'var(--warning)',fontSize:14,padding:0,lineHeight:1}}
+                  title="Importar só esta">+</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-title">Nova cidade</div>

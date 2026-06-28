@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Café & Tal — Sistema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCFRLkOM5QwYREfgdgNZyA2NmFyOC9h6lw",
+    authDomain: "cafe-e-tal.firebaseapp.com",
+    projectId: "cafe-e-tal",
+    storageBucket: "cafe-e-tal.firebasestorage.app",
+    messagingSenderId: "912294098966",
+    appId: "1:912294098966:web:f3ba646b58467128b49d37"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  window._db = db;
+  window._col = collection;
+  window._doc = doc;
+  window._getDocs = getDocs;
+  window._setDoc = setDoc;
+  window._deleteDoc = deleteDoc;
+  window._onSnapshot = onSnapshot;
+  window._writeBatch = writeBatch;
+  window._firebaseReady = true;
+  window.dispatchEvent(new Event('firebaseReady'));
+</script>
+<style>
+  :root {
+    --wine: #8B1A4A; --wine-dark: #6B1238; --wine-light: #B02560;
+    --gold: #D4AF6A; --gold-light: #E8C97C; --gold-dark: #A88245;
+    --cream: #FDF8F0; --cream-dark: #F5EDD8;
+    --text: #2C1810; --text-muted: #7A5C4A;
+    --border: #E8D5B0;
+    --success: #2D6A4F; --success-bg: #D8F3DC;
+    --danger: #9B2226; --danger-bg: #FFE5E5;
+    --warning: #8B6914; --warning-bg: #FFF3CD;
+    --radius: 10px; --shadow: 0 2px 12px rgba(139,26,74,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+  input, select, textarea, button { font-family: inherit; }
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { background: var(--wine); color: var(--gold); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; box-shadow: 0 2px 8px rgba(0,0,0,0.18); position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--gold); white-space: nowrap; }
+  .topbar-logo span { color: var(--gold-light); font-weight: 400; }
+  .nav { display: flex; gap: 2px; margin-left: auto; flex-wrap: wrap; }
+  .nav-btn { background: none; border: none; color: var(--gold); padding: 8px 11px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+  .nav-btn:hover { background: rgba(212,175,106,0.15); }
+  .nav-btn.active { background: var(--gold); color: var(--wine); font-weight: 700; }
+  .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); margin-left: 4px; display: inline-block; }
+  .sync-dot.syncing { background: #fbbf24; animation: pulse 1s infinite; }
+  .sync-dot.error { background: #f87171; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .main { flex: 1; padding: 1.5rem; max-width: 960px; margin: 0 auto; width: 100%; }
+  .page-title { font-size: 20px; font-weight: 700; color: var(--wine); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 8px; }
+  .card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
+  .card-title { font-size: 15px; font-weight: 700; color: var(--wine); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--cream-dark); }
+  .form-row { display: grid; gap: 10px; margin-bottom: 10px; }
+  .form-row.cols2 { grid-template-columns: 1fr 1fr; }
+  .form-row.cols3 { grid-template-columns: 1fr 1fr 1fr; }
+  .form-row.cols4 { grid-template-columns: 1fr 1fr 1fr auto; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .field input, .field select, .field textarea { width: 100%; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 14px; color: var(--text); background: var(--cream); transition: border-color 0.15s; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--wine); background: #fff; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; border: none; transition: all 0.15s; cursor: pointer; }
+  .btn-primary { background: var(--wine); color: #fff; }
+  .btn-primary:hover { background: var(--wine-dark); }
+  .btn-gold { background: var(--gold); color: var(--wine); }
+  .btn-gold:hover { background: var(--gold-dark); color: #fff; }
+  .btn-ghost { background: none; border: 1.5px solid var(--border); color: var(--text-muted); }
+  .btn-ghost:hover { border-color: var(--wine); color: var(--wine); }
+  .btn-danger { background: none; border: 1.5px solid var(--danger-bg); color: var(--danger); }
+  .btn-danger:hover { background: var(--danger-bg); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge-green { background: var(--success-bg); color: var(--success); }
+  .badge-red { background: var(--danger-bg); color: var(--danger); }
+  .badge-gold { background: var(--warning-bg); color: var(--warning); }
+  .badge-wine { background: #F5E6ED; color: var(--wine); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1.5px solid var(--border); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--cream-dark); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--cream); }
+  .empty-state { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 14px; }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 1rem; }
+  .metric { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); }
+  .metric-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .metric-value { font-size: 20px; font-weight: 700; color: var(--wine); }
+  .metric-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .tab-bar { display: flex; gap: 4px; margin-bottom: 1rem; background: var(--cream-dark); padding: 4px; border-radius: 10px; flex-wrap: wrap; }
+  .tab-btn { flex: 1; padding: 7px 10px; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; background: none; color: var(--text-muted); cursor: pointer; transition: all 0.15s; min-width: 80px; }
+  .tab-btn.active { background: #fff; color: var(--wine); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .modal-bg { position: fixed; inset: 0; background: rgba(44,24,16,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .modal { background: #fff; border-radius: 14px; padding: 1.5rem; width: 100%; max-width: 520px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-size: 17px; font-weight: 700; color: var(--wine); margin-bottom: 1rem; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--cream-dark); }
+  .nota-preview { background: var(--cream); border: 1px dashed var(--gold); border-radius: var(--radius); padding: 1rem; font-family: monospace; font-size: 13px; white-space: pre-wrap; color: var(--text); margin-bottom: 1rem; max-height: 300px; overflow-y: auto; }
+  .toggle { position: relative; display: inline-block; width: 36px; height: 20px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; cursor: pointer; top:0;left:0;right:0;bottom:0; background:#ccc; border-radius:20px; transition:.2s; }
+  .toggle-slider:before { position:absolute;content:"";height:14px;width:14px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s; }
+  .toggle input:checked + .toggle-slider { background: var(--wine); }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(16px); }
+  .alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; }
+  .alert-success { background: var(--success-bg); color: var(--success); }
+  .alert-danger { background: var(--danger-bg); color: var(--danger); }
+  .item-linha { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 6px; }
+  .separator { height: 1px; background: var(--cream-dark); margin: 1rem 0; }
+  .total-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 14px; }
+  .total-row.grand { font-size: 16px; font-weight: 700; color: var(--wine); border-top: 2px solid var(--wine); padding-top: 10px; margin-top: 4px; }
+  .whats-btn { background:#25D366;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;width:100%;justify-content:center; }
+  .bar-wrap { display:flex;align-items:center;gap:8px;margin-bottom:8px; }
+  .bar-label { font-size:12px;color:var(--text);min-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  .bar-bg { flex:1;background:var(--cream-dark);border-radius:4px;height:12px; }
+  .bar-fill { height:12px;border-radius:4px;background:var(--wine);transition:width 0.4s; }
+  .bar-val { font-size:12px;color:var(--text-muted);min-width:80px;text-align:right; }
+  .loading-screen { display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:1rem; }
+  .spinner { width:40px;height:40px;border:3px solid var(--cream-dark);border-top-color:var(--wine);border-radius:50%;animation:spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .scroll-x { overflow-x: auto; }
+  .highlight-row td { font-weight: 700; }
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white; }
+    .card { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
+    .topbar { display: none; }
+  }
+  @media (max-width: 640px) {
+    .nav-btn { padding: 8px 7px; font-size: 11px; }
+    .form-row.cols2, .form-row.cols3, .form-row.cols4 { grid-template-columns: 1fr; }
+    .main { padding: 1rem; }
+    .item-linha { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// ── Firebase helpers ──────────────────────────────────────────────
+function getDB() { return window._db; }
+function colRef(name) { return window._col(getDB(), name); }
+function docRef(col, id) { return window._doc(getDB(), col, id); }
+
+async function saveDoc(colName, id, data) {
+  await window._setDoc(docRef(colName, id), data);
+}
+async function deleteDocById(colName, id) {
+  await window._deleteDoc(docRef(colName, id));
+}
+function subscribeCol(colName, callback) {
+  return window._onSnapshot(colRef(colName), snap => {
+    const docs = {};
+    snap.forEach(d => { docs[d.id] = { id: d.id, ...d.data() }; });
+    callback(docs);
+  });
+}
+
+// ── Utils ─────────────────────────────────────────────────────────
+function fmt(n) { return Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function pct(a,b) { return b>0?((a/b)*100).toFixed(1)+'%':'—'; }
+function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function hoje() { return new Date().toISOString().slice(0,10); }
+function primeiroDiaMes() { const d=new Date();d.setDate(1);return d.toISOString().slice(0,10); }
+
+// ── useFirestore hook ─────────────────────────────────────────────
+function useFirestore(colName) {
+  const [docs, setDocs] = useState({});
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!window._firebaseReady) return;
+    const unsub = subscribeCol(colName, d => { setDocs(d); setLoading(false); });
+    return unsub;
+  }, [colName]);
+  const arr = useMemo(() => Object.values(docs), [docs]);
+  return { docs, arr, loading };
+}
+
+// ── PRODUTOS ──────────────────────────────────────────────────────
+function Produtos({ syncing, setSyncing }) {
+  const { arr: produtos, loading } = useFirestore('produtos');
+  const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
+  const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
+  const [form, setForm] = useState({ nome:'', custo:'', venda:'' });
+  const [estoqueEdit, setEstoqueEdit] = useState(null);
+  const [alert, setAlert] = useState(null);
+
+  function showAlert(tipo, msg) { setAlert({tipo,msg}); setTimeout(()=>setAlert(null),2500); }
+
+  async function salvar() {
+    if (!form.nome||!form.venda) return showAlert('danger','Preencha nome e preço de venda.');
+    const id = uid();
+    setSyncing(true);
+    try {
+      await saveDoc('produtos', id, { nome:form.nome, custo:parseFloat(form.custo)||0, venda:parseFloat(form.venda), ativo:true });
+      await saveDoc('estoque_delivery', id, { qtd:0 });
+      await saveDoc('estoque_feirinha', id, { qtd:0 });
+      setForm({nome:'',custo:'',venda:''});
+      showAlert('success','Produto cadastrado!');
+    } catch(e){ showAlert('danger','Erro ao salvar.'); }
+    setSyncing(false);
+  }
+
+  async function toggleAtivo(p) {
+    setSyncing(true);
+    await saveDoc('produtos', p.id, {...p, ativo:!p.ativo});
+    setSyncing(false);
+  }
+
+  async function atualizarEstoque() {
+    setSyncing(true);
+    await saveDoc('estoque_delivery', estoqueEdit.id, { qtd: parseInt(estoqueEdit.delivery)||0 });
+    await saveDoc('estoque_feirinha', estoqueEdit.id, { qtd: parseInt(estoqueEdit.feirinha)||0 });
+    setEstoqueEdit(null);
+    setSyncing(false);
+  }
+
+  async function excluir(id) {
+    if (!confirm('Excluir produto?')) return;
+    setSyncing(true);
+    await deleteDocById('produtos', id);
+    setSyncing(false);
+  }
+
+  if (loading) return <div className="loading-screen"><div className="spinner"/><span style={{color:'var(--text-muted)'}}>Carregando produtos...</span></div>;
+
+  return (
+    <div>
+      <div className="page-title">☕ Produtos</div>
+      {alert && <div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+      <div className="card">
+        <div className="card-title">Novo produto</div>
+        <div className="form-row cols3">
+          <div className="field"><label>Nome</label><input value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} placeholder="Ex: Café Especial 250g"/></div>
+          <div className="field"><label>Custo (R$)</label><input type="number" value={form.custo} onChange={e=>setForm(f=>({...f,custo:e.target.value}))} placeholder="0,00"/></div>
+          <div className="field"><label>Venda (R$)</label><input type="number" value={form.venda} onChange={e=>setForm(f=>({...f,venda:e.target.value}))} placeholder="0,00"/></div>
+        </div>
+        <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Cadastrar produto</button>
+      </div>
+
+      {estoqueEdit && (
+        <div className="card" style={{borderColor:'var(--gold)'}}>
+          <div className="card-title">Ajustar estoque — {produtos.find(p=>p.id===estoqueEdit.id)?.nome}</div>
+          <div className="form-row cols2">
+            <div className="field"><label>Estoque Delivery</label><input type="number" value={estoqueEdit.delivery} onChange={e=>setEstoqueEdit(s=>({...s,delivery:e.target.value}))}/></div>
+            <div className="field"><label>Estoque Feirinha</label><input type="number" value={estoqueEdit.feirinha} onChange={e=>setEstoqueEdit(s=>({...s,feirinha:e.target.value}))}/></div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-gold" onClick={atualizarEstoque} disabled={syncing}>Salvar estoque</button>
+            <button className="btn btn-ghost" onClick={()=>setEstoqueEdit(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="scroll-x">
+          <table>
+            <thead><tr><th>Produto</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Stk Delivery</th><th>Stk Feira</th><th>Ativo</th><th></th></tr></thead>
+            <tbody>
+              {produtos.length===0 && <tr><td colSpan={8}><div className="empty-state">Nenhum produto cadastrado</div></td></tr>}
+              {produtos.map(p => {
+                const margem = p.custo>0?((p.venda-p.custo)/p.venda*100).toFixed(0)+'%':'—';
+                return (
+                  <tr key={p.id} style={{opacity:p.ativo?1:0.5}}>
+                    <td style={{fontWeight:600}}>{p.nome}</td>
+                    <td>{fmt(p.custo)}</td>
+                    <td style={{color:'var(--wine)',fontWeight:700}}>{fmt(p.venda)}</td>
+                    <td><span className="badge badge-green">{margem}</span></td>
+                    <td>{estoqueDelivery[p.id]?.qtd??0}</td>
+                    <td>{estoqueFeirinha[p.id]?.qtd??0}</td>
+                    <td><label className="toggle"><input type="checkbox" checked={!!p.ativo} onChange={()=>toggleAtivo(p)}/><span className="toggle-slider"/></label></td>
+                    <td style={{display:'flex',gap:4}}>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setEstoqueEdit({id:p.id,delivery:estoqueDelivery[p.id]?.qtd??0,feirinha:estoqueFeirinha[p.id]?.qtd??0})}>Estoque</button>
+                      <button className="btn btn-danger btn-sm" onClick={()=>excluir(p.id)}>✕</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── VENDEDORES ────────────────────────────────────────────────────
+function Vendedores({ syncing, setSyncing }) {
+  const { arr: vendedores, loading } = useFirestore('vendedores');
+  const { arr: vendas } = useFirestore('vendas');
+  const [form, setForm] = useState({nome:'',telefone:''});
+  const [alert, setAlert] = useState(null);
+
+  function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
+
+  async function salvar() {
+    if(!form.nome) return showAlert('danger','Informe o nome.');
+    setSyncing(true);
+    await saveDoc('vendedores', uid(), {nome:form.nome, telefone:form.telefone});
+    setForm({nome:'',telefone:''});
+    showAlert('success','Vendedor cadastrado!');
+    setSyncing(false);
+  }
+
+  async function excluir(id) {
+    if(!confirm('Excluir vendedor?')) return;
+    setSyncing(true);
+    await deleteDocById('vendedores',id);
+    setSyncing(false);
+  }
+
+  if(loading) return <div className="loading-screen"><div className="spinner"/></div>;
+
+  return (
+    <div>
+      <div className="page-title">👤 Vendedores</div>
+      {alert && <div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+      <div className="card">
+        <div className="card-title">Novo vendedor</div>
+        <div className="form-row cols2">
+          <div className="field"><label>Nome</label><input value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} placeholder="Nome completo"/></div>
+          <div className="field"><label>Telefone (opcional)</label><input value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))} placeholder="(99) 99999-9999"/></div>
+        </div>
+        <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Cadastrar vendedor</button>
+      </div>
+      <div className="card">
+        <table>
+          <thead><tr><th>Nome</th><th>Telefone</th><th>Vendas</th><th></th></tr></thead>
+          <tbody>
+            {vendedores.length===0 && <tr><td colSpan={4}><div className="empty-state">Nenhum vendedor cadastrado</div></td></tr>}
+            {vendedores.map(v => {
+              const qtd = vendas.filter(vd=>vd.vendedor_id===v.id).length;
+              return (
+                <tr key={v.id}>
+                  <td style={{fontWeight:600}}>{v.nome}</td>
+                  <td style={{color:'var(--text-muted)'}}>{v.telefone||'—'}</td>
+                  <td><span className="badge badge-wine">{qtd} venda{qtd!==1?'s':''}</span></td>
+                  <td><button className="btn btn-danger btn-sm" onClick={()=>excluir(v.id)}>✕</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── COMPRADORES ───────────────────────────────────────────────────
+function Compradores({ syncing, setSyncing }) {
+  const { arr: compradores, loading } = useFirestore('compradores');
+  const { arr: vendas } = useFirestore('vendas');
+  const [form, setForm] = useState({nome:'',telefone:'',cidade:'',endereco:''});
+  const [alert, setAlert] = useState(null);
+
+  function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
+
+  async function salvar() {
+    if(!form.nome||!form.cidade) return showAlert('danger','Nome e cidade são obrigatórios.');
+    setSyncing(true);
+    await saveDoc('compradores', uid(), {...form});
+    setForm({nome:'',telefone:'',cidade:'',endereco:''});
+    showAlert('success','Comprador cadastrado!');
+    setSyncing(false);
+  }
+
+  async function excluir(id) {
+    if(!confirm('Excluir comprador?')) return;
+    setSyncing(true);
+    await deleteDocById('compradores',id);
+    setSyncing(false);
+  }
+
+  if(loading) return <div className="loading-screen"><div className="spinner"/></div>;
+
+  return (
+    <div>
+      <div className="page-title">🛍 Compradores</div>
+      {alert && <div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+      <div className="card">
+        <div className="card-title">Novo comprador</div>
+        <div className="form-row cols2">
+          <div className="field"><label>Nome</label><input value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} placeholder="Nome completo"/></div>
+          <div className="field"><label>Telefone</label><input value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))} placeholder="(99) 99999-9999"/></div>
+          <div className="field"><label>Cidade</label><input value={form.cidade} onChange={e=>setForm(f=>({...f,cidade:e.target.value}))} placeholder="Ex: Juazeiro - BA"/></div>
+          <div className="field"><label>Endereço (opcional)</label><input value={form.endereco} onChange={e=>setForm(f=>({...f,endereco:e.target.value}))} placeholder="Rua, nº, bairro"/></div>
+        </div>
+        <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Cadastrar comprador</button>
+      </div>
+      <div className="card">
+        <table>
+          <thead><tr><th>Nome</th><th>Cidade</th><th>Telefone</th><th>Situação</th><th></th></tr></thead>
+          <tbody>
+            {compradores.length===0 && <tr><td colSpan={5}><div className="empty-state">Nenhum comprador cadastrado</div></td></tr>}
+            {compradores.map(c => {
+              const pendente = vendas.filter(v=>v.comprador_id===c.id&&v.status==='pendente').length>0;
+              return (
+                <tr key={c.id}>
+                  <td style={{fontWeight:600}}>{c.nome}</td>
+                  <td style={{color:'var(--text-muted)'}}>{c.cidade}</td>
+                  <td style={{color:'var(--text-muted)'}}>{c.telefone||'—'}</td>
+                  <td>{pendente?<span className="badge badge-gold">⚠ Pendente</span>:<span className="badge badge-green">Em dia</span>}</td>
+                  <td><button className="btn btn-danger btn-sm" onClick={()=>excluir(c.id)}>✕</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── VENDAS ────────────────────────────────────────────────────────
+function Vendas({ syncing, setSyncing }) {
+  const { arr: produtos } = useFirestore('produtos');
+  const { arr: vendedores } = useFirestore('vendedores');
+  const { arr: compradores } = useFirestore('compradores');
+  const { arr: vendas, loading } = useFirestore('vendas');
+  const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
+  const [tab, setTab] = useState('nova');
+  const [form, setForm] = useState({comprador_id:'',vendedor_id:'',data:hoje(),itens:[{produto_id:'',qtd:1}],obs:'',status:'pendente'});
+  const [alert, setAlert] = useState(null);
+  const [notaModal, setNotaModal] = useState(null);
+  const [filtro, setFiltro] = useState('todos');
+
+  function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
+  function addItem(){setForm(f=>({...f,itens:[...f.itens,{produto_id:'',qtd:1}]}));}
+  function removeItem(i){setForm(f=>({...f,itens:f.itens.filter((_,idx)=>idx!==i)}));}
+  function setItem(i,key,val){setForm(f=>({...f,itens:f.itens.map((it,idx)=>idx===i?{...it,[key]:val}:it)}));}
+
+  function calcTotal(itens){
+    return itens.reduce((acc,it)=>{
+      const p=produtos.find(x=>x.id===it.produto_id);
+      return acc+(p?p.venda*(parseInt(it.qtd)||0):0);
+    },0);
+  }
+  function calcLucro(itens){
+    return itens.reduce((acc,it)=>{
+      const p=produtos.find(x=>x.id===it.produto_id);
+      return acc+(p?(p.venda-p.custo)*(parseInt(it.qtd)||0):0);
+    },0);
+  }
+
+  async function salvar() {
+    if(!form.comprador_id||!form.vendedor_id) return showAlert('danger','Selecione comprador e vendedor.');
+    if(form.itens.some(it=>!it.produto_id||!it.qtd)) return showAlert('danger','Preencha todos os itens.');
+    setSyncing(true);
+    try {
+      const id = uid();
+      const venda = {...form, id, total:calcTotal(form.itens), lucro:calcLucro(form.itens), criado_em:new Date().toISOString()};
+      await saveDoc('vendas', id, venda);
+      // baixa estoque delivery
+      for(const it of form.itens){
+        const atual = estoqueDelivery[it.produto_id]?.qtd||0;
+        await saveDoc('estoque_delivery', it.produto_id, {qtd:Math.max(0,atual-(parseInt(it.qtd)||0))});
+      }
+      setForm({comprador_id:'',vendedor_id:'',data:hoje(),itens:[{produto_id:'',qtd:1}],obs:'',status:'pendente'});
+      showAlert('success','Venda registrada!');
+      setTab('lista');
+    } catch(e){ showAlert('danger','Erro ao salvar.'); }
+    setSyncing(false);
+  }
+
+  async function togglePago(venda) {
+    setSyncing(true);
+    await saveDoc('vendas', venda.id, {...venda, status:venda.status==='pago'?'pendente':'pago'});
+    setSyncing(false);
+  }
+
+  async function excluirVenda(id) {
+    if(!confirm('Excluir venda?')) return;
+    setSyncing(true);
+    await deleteDocById('vendas',id);
+    setSyncing(false);
+  }
+
+  function gerarNota(venda) {
+    const comp = compradores.find(c=>c.id===venda.comprador_id);
+    const vend = vendedores.find(v=>v.id===venda.vendedor_id);
+    let t=`☕ *CAFÉ & TAL*\n━━━━━━━━━━━━━━━━━━━━\n`;
+    t+=`📋 *Pedido #${venda.id.slice(0,6).toUpperCase()}*\n`;
+    t+=`📅 ${venda.data}\n`;
+    t+=`👤 Cliente: ${comp?.nome||'—'}\n`;
+    if(comp?.cidade) t+=`📍 ${comp.cidade}\n`;
+    if(comp?.endereco) t+=`🏠 ${comp.endereco}\n`;
+    t+=`🤝 Vendedor: ${vend?.nome||'—'}\n`;
+    t+=`━━━━━━━━━━━━━━━━━━━━\n*ITENS:*\n`;
+    venda.itens?.forEach(it=>{
+      const p=produtos.find(x=>x.id===it.produto_id);
+      if(p) t+=`• ${p.nome} x${it.qtd} = ${fmt(p.venda*it.qtd)}\n`;
+    });
+    t+=`━━━━━━━━━━━━━━━━━━━━\n💰 *TOTAL: ${fmt(venda.total)}*\n`;
+    if(venda.obs) t+=`📝 ${venda.obs}\n`;
+    t+=`\nStatus: ${venda.status==='pago'?'✅ PAGO':'⏳ AGUARDANDO PAGAMENTO'}\n\nObrigada pela preferência! 🙏☕`;
+    setNotaModal({texto:t,venda,comp});
+  }
+
+  const prodAtivos = produtos.filter(p=>p.ativo);
+  const vendasFiltradas = filtro==='todos'?vendas:vendas.filter(v=>v.status===filtro);
+  const pendentesQtd = vendas.filter(v=>v.status==='pendente').length;
+
+  if(loading) return <div className="loading-screen"><div className="spinner"/></div>;
+
+  return (
+    <div>
+      <div className="page-title">🛒 Vendas</div>
+      <div className="tab-bar">
+        <button className={`tab-btn ${tab==='nova'?'active':''}`} onClick={()=>setTab('nova')}>Nova venda</button>
+        <button className={`tab-btn ${tab==='lista'?'active':''}`} onClick={()=>setTab('lista')}>Histórico</button>
+        <button className={`tab-btn ${tab==='pendentes'?'active':''}`} onClick={()=>setTab('pendentes')}>
+          Pendências {pendentesQtd>0&&<span className="badge badge-gold" style={{marginLeft:4}}>{pendentesQtd}</span>}
+        </button>
+      </div>
+
+      {tab==='nova'&&(
+        <div className="card">
+          {alert&&<div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+          <div className="card-title">Registrar venda</div>
+          <div className="form-row cols3">
+            <div className="field"><label>Comprador</label>
+              <select value={form.comprador_id} onChange={e=>setForm(f=>({...f,comprador_id:e.target.value}))}>
+                <option value="">Selecionar...</option>
+                {compradores.map(c=><option key={c.id} value={c.id}>{c.nome} — {c.cidade}</option>)}
+              </select>
+            </div>
+            <div className="field"><label>Vendedor</label>
+              <select value={form.vendedor_id} onChange={e=>setForm(f=>({...f,vendedor_id:e.target.value}))}>
+                <option value="">Selecionar...</option>
+                {vendedores.map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}
+              </select>
+            </div>
+            <div className="field"><label>Data</label><input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))}/></div>
+          </div>
+          <div className="separator"/>
+          <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS DO PEDIDO</div>
+          {form.itens.map((it,i)=>(
+            <div key={i} className="item-linha">
+              <div className="field" style={{flex:2}}>
+                {i===0&&<label>Produto</label>}
+                <select value={it.produto_id} onChange={e=>setItem(i,'produto_id',e.target.value)}>
+                  <option value="">Selecionar...</option>
+                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome} — {fmt(p.venda)}</option>)}
+                </select>
+              </div>
+              <div className="field" style={{width:70}}>
+                {i===0&&<label>Qtd</label>}
+                <input type="number" min="1" value={it.qtd} onChange={e=>setItem(i,'qtd',e.target.value)}/>
+              </div>
+              <div style={{paddingBottom:2}}>
+                <button className="btn btn-ghost btn-sm" onClick={()=>removeItem(i)} disabled={form.itens.length===1}>✕</button>
+              </div>
+            </div>
+          ))}
+          <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={addItem}>+ Adicionar item</button>
+          <div className="separator"/>
+          <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens))}</span></div>
+          <div className="separator"/>
+          <div className="form-row"><div className="field"><label>Observações</label><textarea value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))} rows={2} placeholder="Ex: Entregar à tarde..."/></div></div>
+          <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
+            <div className="field" style={{margin:0}}>
+              <label>Pagamento</label>
+              <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}>
+                <option value="pendente">Aguardando pagamento</option>
+                <option value="pago">Já pago</option>
+              </select>
+            </div>
+            <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
+          </div>
+        </div>
+      )}
+
+      {tab==='lista'&&(
+        <div className="card">
+          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+            {['todos','pago','pendente'].map(f=>(
+              <button key={f} className={`btn btn-sm ${filtro===f?'btn-primary':'btn-ghost'}`} onClick={()=>setFiltro(f)}>
+                {f==='todos'?'Todos':f==='pago'?'Pagos':'Pendentes'}
+              </button>
+            ))}
+          </div>
+          <div className="scroll-x">
+            <table>
+              <thead><tr><th>Data</th><th>Comprador</th><th>Vendedor</th><th>Total</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {vendasFiltradas.length===0&&<tr><td colSpan={6}><div className="empty-state">Nenhuma venda encontrada</div></td></tr>}
+                {[...vendasFiltradas].sort((a,b)=>b.data?.localeCompare(a.data)).map(v=>{
+                  const comp=compradores.find(c=>c.id===v.comprador_id);
+                  const vend=vendedores.find(x=>x.id===v.vendedor_id);
+                  return (
+                    <tr key={v.id}>
+                      <td style={{color:'var(--text-muted)'}}>{v.data}</td>
+                      <td style={{fontWeight:600}}>{comp?.nome||'—'}</td>
+                      <td style={{color:'var(--text-muted)'}}>{vend?.nome||'—'}</td>
+                      <td style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</td>
+                      <td>
+                        <span className={`badge ${v.status==='pago'?'badge-green':'badge-gold'}`} style={{cursor:'pointer'}} onClick={()=>togglePago(v)} title="Clique para alternar">
+                          {v.status==='pago'?'✅ Pago':'⏳ Pendente'}
+                        </span>
+                      </td>
+                      <td style={{display:'flex',gap:4}}>
+                        <button className="btn btn-gold btn-sm" onClick={()=>gerarNota(v)}>📋 Nota</button>
+                        <button className="btn btn-danger btn-sm" onClick={()=>excluirVenda(v.id)}>✕</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab==='pendentes'&&(
+        <div className="card">
+          {vendas.filter(v=>v.status==='pendente').length===0
+            ?<div className="empty-state">🎉 Nenhuma pendência! Tudo em dia.</div>
+            :[...vendas.filter(v=>v.status==='pendente')].sort((a,b)=>a.data?.localeCompare(b.data)).map(v=>{
+              const comp=compradores.find(c=>c.id===v.comprador_id);
+              return (
+                <div key={v.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--cream-dark)',flexWrap:'wrap',gap:8}}>
+                  <div>
+                    <div style={{fontWeight:700}}>{comp?.nome||'—'}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?.cidade} • {v.data}</div>
+                  </div>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <span style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</span>
+                    <button className="btn btn-gold btn-sm" onClick={()=>gerarNota(v)}>📋 Nota</button>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>togglePago(v)}>✅ Marcar pago</button>
+                  </div>
+                </div>
+              );
+            })
+          }
+        </div>
+      )}
+
+      {notaModal&&(
+        <div className="modal-bg" onClick={()=>setNotaModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-title">📋 Nota de cobrança</div>
+            <div className="nota-preview">{notaModal.texto}</div>
+            <button className="whats-btn" onClick={()=>{
+              const tel=notaModal.comp?.telefone?.replace(/\D/g,'');
+              const msg=encodeURIComponent(notaModal.texto);
+              window.open(tel?`https://wa.me/55${tel}?text=${msg}`:`https://wa.me/?text=${msg}`,'_blank');
+            }}>📲 Abrir no WhatsApp</button>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={()=>navigator.clipboard?.writeText(notaModal.texto)}>Copiar texto</button>
+              <button className="btn btn-ghost" onClick={()=>setNotaModal(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── FEIRINHA ──────────────────────────────────────────────────────
+function Feirinha({ syncing, setSyncing }) {
+  const { arr: produtos } = useFirestore('produtos');
+  const { arr: feirinha, loading } = useFirestore('feirinha');
+  const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
+  const [tab, setTab] = useState('nova');
+  const [form, setForm] = useState({data:hoje(),local:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
+  const [alert, setAlert] = useState(null);
+
+  function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
+  function setItem(i,key,val){setForm(f=>({...f,itens:f.itens.map((it,idx)=>idx===i?{...it,[key]:val}:it)}));}
+  function addItem(){setForm(f=>({...f,itens:[...f.itens,{produto_id:'',qtd:1,preco_unitario:''}]}));}
+  function removeItem(i){setForm(f=>({...f,itens:f.itens.filter((_,idx)=>idx!==i)}));}
+  function autoPreco(i,pid){
+    const p=produtos.find(x=>x.id===pid);
+    setForm(f=>({...f,itens:f.itens.map((it,idx)=>idx===i?{...it,produto_id:pid,preco_unitario:p?p.venda:''}:it)}));
+  }
+  function calcTotal(itens){return itens.reduce((a,it)=>a+((parseFloat(it.preco_unitario)||0)*(parseInt(it.qtd)||0)),0);}
+  function calcLucro(itens){
+    return itens.reduce((a,it)=>{
+      const p=produtos.find(x=>x.id===it.produto_id);
+      return a+((parseFloat(it.preco_unitario)-(p?.custo||0))*(parseInt(it.qtd)||0));
+    },0);
+  }
+
+  async function salvar() {
+    if(!form.local) return showAlert('danger','Informe o local da feira.');
+    if(form.itens.some(it=>!it.produto_id||!it.qtd||!it.preco_unitario)) return showAlert('danger','Preencha todos os itens.');
+    setSyncing(true);
+    try {
+      const id=uid();
+      await saveDoc('feirinha',id,{...form,total:calcTotal(form.itens),lucro:calcLucro(form.itens),criado_em:new Date().toISOString()});
+      for(const it of form.itens){
+        const atual=estoqueFeirinha[it.produto_id]?.qtd||0;
+        await saveDoc('estoque_feirinha',it.produto_id,{qtd:Math.max(0,atual-(parseInt(it.qtd)||0))});
+      }
+      setForm({data:hoje(),local:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
+      showAlert('success','Venda registrada!');
+      setTab('historico');
+    } catch(e){showAlert('danger','Erro ao salvar.');}
+    setSyncing(false);
+  }
+
+  async function excluir(id){
+    if(!confirm('Excluir registro?')) return;
+    setSyncing(true);
+    await deleteDocById('feirinha',id);
+    setSyncing(false);
+  }
+
+  const prodAtivos=produtos.filter(p=>p.ativo);
+  const totalFeiras=feirinha.reduce((a,f)=>a+f.total,0);
+  const lucroFeiras=feirinha.reduce((a,f)=>a+f.lucro,0);
+
+  if(loading) return <div className="loading-screen"><div className="spinner"/></div>;
+
+  return (
+    <div>
+      <div className="page-title">🏪 Feirinha</div>
+      <div className="metric-grid" style={{marginBottom:16}}>
+        <div className="metric"><div className="metric-label">Total arrecadado</div><div className="metric-value">{fmt(totalFeiras)}</div></div>
+        <div className="metric"><div className="metric-label">Lucro real</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(lucroFeiras)}</div></div>
+        <div className="metric"><div className="metric-label">Feiras realizadas</div><div className="metric-value">{feirinha.length}</div></div>
+      </div>
+      <div className="tab-bar">
+        <button className={`tab-btn ${tab==='nova'?'active':''}`} onClick={()=>setTab('nova')}>Registrar venda</button>
+        <button className={`tab-btn ${tab==='historico'?'active':''}`} onClick={()=>setTab('historico')}>Histórico</button>
+      </div>
+
+      {tab==='nova'&&(
+        <div className="card">
+          {alert&&<div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+          <div className="card-title">Venda na feira</div>
+          <div className="form-row cols2">
+            <div className="field"><label>Data</label><input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))}/></div>
+            <div className="field"><label>Local</label><input value={form.local} onChange={e=>setForm(f=>({...f,local:e.target.value}))} placeholder="Ex: Feira da Orla, Juazeiro"/></div>
+          </div>
+          <div className="separator"/>
+          <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS VENDIDOS</div>
+          {form.itens.map((it,i)=>(
+            <div key={i} className="item-linha">
+              <div className="field" style={{flex:2}}>
+                {i===0&&<label>Produto</label>}
+                <select value={it.produto_id} onChange={e=>autoPreco(i,e.target.value)}>
+                  <option value="">Selecionar...</option>
+                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select>
+              </div>
+              <div className="field" style={{width:70}}>
+                {i===0&&<label>Qtd</label>}
+                <input type="number" min="1" value={it.qtd} onChange={e=>setItem(i,'qtd',e.target.value)}/>
+              </div>
+              <div className="field" style={{width:100}}>
+                {i===0&&<label>Preço unit.</label>}
+                <input type="number" step="0.01" value={it.preco_unitario} onChange={e=>setItem(i,'preco_unitario',e.target.value)} placeholder="0,00"/>
+              </div>
+              <div style={{paddingBottom:2}}>
+                <button className="btn btn-ghost btn-sm" onClick={()=>removeItem(i)} disabled={form.itens.length===1}>✕</button>
+              </div>
+            </div>
+          ))}
+          <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={addItem}>+ Adicionar item</button>
+          <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens))}</span></div>
+          <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Lucro estimado</span><span style={{color:'var(--success)',fontSize:13,fontWeight:600}}>{fmt(calcLucro(form.itens))}</span></div>
+          <div className="separator"/>
+          <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
+        </div>
+      )}
+
+      {tab==='historico'&&(
+        <div className="card">
+          {feirinha.length===0&&<div className="empty-state">Nenhuma venda na feirinha registrada</div>}
+          {[...feirinha].sort((a,b)=>b.data?.localeCompare(a.data)).map(f=>(
+            <div key={f.id} style={{borderBottom:'1px solid var(--cream-dark)',paddingBottom:12,marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:8}}>
+                <div>
+                  <div style={{fontWeight:700}}>{f.local}</div>
+                  <div style={{fontSize:12,color:'var(--text-muted)'}}>{f.data}</div>
+                  <div style={{fontSize:12,marginTop:4}}>
+                    {f.itens?.map((it,i)=>{
+                      const p=produtos.find(x=>x.id===it.produto_id);
+                      return <span key={i} style={{marginRight:8}}>{p?.nome||'?'} ×{it.qtd}</span>;
+                    })}
+                  </div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontWeight:700,color:'var(--wine)'}}>{fmt(f.total)}</div>
+                  <div style={{fontSize:12,color:'var(--success)'}}>lucro {fmt(f.lucro)}</div>
+                  <button className="btn btn-danger btn-sm" style={{marginTop:4}} onClick={()=>excluir(f.id)}>Excluir</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── RELATÓRIO ─────────────────────────────────────────────────────
+function Relatorio() {
+  const { arr: produtos } = useFirestore('produtos');
+  const { arr: vendedores } = useFirestore('vendedores');
+  const { arr: compradores } = useFirestore('compradores');
+  const { arr: vendas } = useFirestore('vendas');
+  const { arr: feirinha } = useFirestore('feirinha');
+  const [filtro, setFiltro] = useState({de:primeiroDiaMes(),ate:hoje(),canal:'todos',vendedor_id:''});
+  const [gerado, setGerado] = useState(false);
+  const [tab, setTab] = useState('resumo');
+
+  const resultado = useMemo(() => {
+    if(!gerado) return null;
+    const {de,ate,canal,vendedor_id} = filtro;
+
+    const vf = vendas.filter(v=>{
+      if(canal==='feirinha') return false;
+      if(v.data<de||v.data>ate) return false;
+      if(vendedor_id&&v.vendedor_id!==vendedor_id) return false;
+      return true;
+    });
+    const ff = feirinha.filter(f=>{
+      if(canal==='delivery') return false;
+      if(f.data<de||f.data>ate) return false;
+      return true;
+    });
+
+    const totalDelivery=vf.reduce((a,v)=>a+v.total,0);
+    const lucroDelivery=vf.reduce((a,v)=>a+(v.lucro||0),0);
+    const totalFeira=ff.reduce((a,f)=>a+f.total,0);
+    const lucroFeira=ff.reduce((a,f)=>a+(f.lucro||0),0);
+    const totalGeral=totalDelivery+totalFeira;
+    const lucroGeral=lucroDelivery+lucroFeira;
+    const pendente=vf.filter(v=>v.status==='pendente').reduce((a,v)=>a+v.total,0);
+    const pago=vf.filter(v=>v.status==='pago').reduce((a,v)=>a+v.total,0);
+
+    const prodC={},prodF={},prodL={};
+    vf.forEach(v=>v.itens?.forEach(it=>{
+      prodC[it.produto_id]=(prodC[it.produto_id]||0)+(parseInt(it.qtd)||0);
+      const p=produtos.find(x=>x.id===it.produto_id);
+      if(p){prodF[it.produto_id]=(prodF[it.produto_id]||0)+p.venda*(parseInt(it.qtd)||0);prodL[it.produto_id]=(prodL[it.produto_id]||0)+(p.venda-p.custo)*(parseInt(it.qtd)||0);}
+    }));
+    ff.forEach(f=>f.itens?.forEach(it=>{
+      prodC[it.produto_id]=(prodC[it.produto_id]||0)+(parseInt(it.qtd)||0);
+      const preco=parseFloat(it.preco_unitario)||0;
+      const p=produtos.find(x=>x.id===it.produto_id);
+      prodF[it.produto_id]=(prodF[it.produto_id]||0)+preco*(parseInt(it.qtd)||0);
+      if(p) prodL[it.produto_id]=(prodL[it.produto_id]||0)+(preco-p.custo)*(parseInt(it.qtd)||0);
+    }));
+
+    const ranking=Object.entries(prodC)
+      .map(([id,qtd])=>({id,qtd,faturamento:prodF[id]||0,lucro:prodL[id]||0,nome:produtos.find(p=>p.id===id)?.nome||'?'}))
+      .sort((a,b)=>b.faturamento-a.faturamento);
+
+    const rankingVendedores=vendedores.map(v=>({
+      nome:v.nome,
+      qtd:vf.filter(x=>x.vendedor_id===v.id).length,
+      total:vf.filter(x=>x.vendedor_id===v.id).reduce((a,x)=>a+x.total,0),
+      lucro:vf.filter(x=>x.vendedor_id===v.id).reduce((a,x)=>a+(x.lucro||0),0),
+    })).filter(v=>v.qtd>0).sort((a,b)=>b.total-a.total);
+
+    const rankingCompradores=compradores.map(c=>({
+      nome:c.nome,cidade:c.cidade,
+      qtd:vf.filter(v=>v.comprador_id===c.id).length,
+      total:vf.filter(v=>v.comprador_id===c.id).reduce((a,v)=>a+v.total,0),
+      pendente:vf.filter(v=>v.comprador_id===c.id&&v.status==='pendente').reduce((a,v)=>a+v.total,0),
+    })).filter(c=>c.qtd>0).sort((a,b)=>b.total-a.total);
+
+    const porDia={};
+    vf.forEach(v=>{porDia[v.data]=(porDia[v.data]||0)+v.total;});
+    ff.forEach(f=>{porDia[f.data]=(porDia[f.data]||0)+f.total;});
+    const timeline=Object.entries(porDia).sort((a,b)=>a[0].localeCompare(b[0]));
+
+    return {totalDelivery,lucroDelivery,totalFeira,lucroFeira,totalGeral,lucroGeral,pendente,pago,
+      qtdDelivery:vf.length,qtdFeira:ff.length,ranking,rankingVendedores,rankingCompradores,timeline,
+      vendasPendentes:vf.filter(v=>v.status==='pendente')};
+  },[gerado,filtro,vendas,feirinha,produtos,vendedores,compradores]);
+
+  return (
+    <div>
+      <div className="page-title">📈 Relatório por período</div>
+      <div className="card no-print">
+        <div className="card-title">Filtros</div>
+        <div className="form-row cols4">
+          <div className="field"><label>De</label><input type="date" value={filtro.de} onChange={e=>setFiltro(f=>({...f,de:e.target.value}))}/></div>
+          <div className="field"><label>Até</label><input type="date" value={filtro.ate} onChange={e=>setFiltro(f=>({...f,ate:e.target.value}))}/></div>
+          <div className="field"><label>Canal</label>
+            <select value={filtro.canal} onChange={e=>setFiltro(f=>({...f,canal:e.target.value}))}>
+              <option value="todos">Todos os canais</option>
+              <option value="delivery">Só delivery</option>
+              <option value="feirinha">Só feirinha</option>
+            </select>
+          </div>
+          <div className="field"><label>Vendedor</label>
+            <select value={filtro.vendedor_id} onChange={e=>setFiltro(f=>({...f,vendedor_id:e.target.value}))}>
+              <option value="">Todos</option>
+              {vendedores.map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button className="btn btn-primary" onClick={()=>{setGerado(true);setTab('resumo');}}>Gerar relatório</button>
+          {resultado&&<button className="btn btn-gold" onClick={()=>window.print()}>🖨 Imprimir / PDF</button>}
+          {resultado&&<button className="btn btn-ghost" onClick={()=>setGerado(false)}>Limpar</button>}
+        </div>
+      </div>
+
+      {!resultado&&<div className="card" style={{textAlign:'center',padding:'2.5rem'}}><div style={{fontSize:36,marginBottom:12}}>☕</div><div style={{color:'var(--text-muted)',fontSize:14}}>Selecione o período e clique em <strong>Gerar relatório</strong></div></div>}
+
+      {resultado&&(
+        <>
+          <div className="tab-bar no-print">
+            {['resumo','produtos','vendedores','compradores','pendencias'].map(t=>(
+              <button key={t} className={`tab-btn ${tab===t?'active':''}`} onClick={()=>setTab(t)}>
+                {t==='resumo'?'📊 Resumo':t==='produtos'?'☕ Produtos':t==='vendedores'?'👤 Vendedores':t==='compradores'?'🛍 Clientes':'⏳ Pendências'}
+              </button>
+            ))}
+          </div>
+
+          {tab==='resumo'&&(
+            <>
+              <div className="metric-grid">
+                <div className="metric"><div className="metric-label">Faturamento total</div><div className="metric-value">{fmt(resultado.totalGeral)}</div><div className="metric-sub">{resultado.qtdDelivery+resultado.qtdFeira} vendas</div></div>
+                <div className="metric"><div className="metric-label">Lucro real</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(resultado.lucroGeral)}</div><div className="metric-sub">margem {pct(resultado.lucroGeral,resultado.totalGeral)}</div></div>
+                <div className="metric"><div className="metric-label">Delivery</div><div className="metric-value">{fmt(resultado.totalDelivery)}</div><div className="metric-sub">{resultado.qtdDelivery} pedidos</div></div>
+                <div className="metric"><div className="metric-label">Feirinha</div><div className="metric-value">{fmt(resultado.totalFeira)}</div><div className="metric-sub">{resultado.qtdFeira} registros</div></div>
+                <div className="metric"><div className="metric-label">Já recebido</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(resultado.pago)}</div></div>
+                <div className="metric"><div className="metric-label">A receber</div><div className="metric-value" style={{color:resultado.pendente>0?'var(--warning)':'var(--success)'}}>{fmt(resultado.pendente)}</div></div>
+              </div>
+              {resultado.timeline.length>0&&(
+                <div className="card">
+                  <div className="card-title">Faturamento por dia</div>
+                  {resultado.timeline.map(([dia,total])=>{
+                    const maxT=Math.max(...resultado.timeline.map(x=>x[1]));
+                    return (
+                      <div key={dia} className="bar-wrap">
+                        <div className="bar-label">{dia.split('-').reverse().join('/')}</div>
+                        <div className="bar-bg"><div className="bar-fill" style={{width:`${(total/maxT)*100}%`}}/></div>
+                        <div className="bar-val">{fmt(total)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {tab==='produtos'&&(
+            <div className="card">
+              <div className="card-title">Ranking de produtos</div>
+              {resultado.ranking.length===0?<div className="empty-state">Sem dados no período</div>:(
+                <>
+                  {resultado.ranking.slice(0,8).map((p,i)=>(
+                    <div key={p.id} className="bar-wrap">
+                      <div className="bar-label"><span style={{color:'var(--text-muted)',marginRight:4}}>#{i+1}</span>{p.nome}</div>
+                      <div className="bar-bg"><div className="bar-fill" style={{width:`${(p.faturamento/(resultado.ranking[0]?.faturamento||1))*100}%`}}/></div>
+                      <div className="bar-val">{fmt(p.faturamento)}</div>
+                    </div>
+                  ))}
+                  <div className="scroll-x" style={{marginTop:16}}>
+                    <table>
+                      <thead><tr><th>#</th><th>Produto</th><th>Qtd</th><th>Faturamento</th><th>Lucro</th><th>Margem</th></tr></thead>
+                      <tbody>
+                        {resultado.ranking.map((p,i)=>(
+                          <tr key={p.id} className={i===0?'highlight-row':''}>
+                            <td style={{color:'var(--text-muted)'}}>#{i+1}</td>
+                            <td style={{fontWeight:600}}>{p.nome}</td>
+                            <td><span className="badge badge-wine">{p.qtd} un</span></td>
+                            <td style={{color:'var(--wine)',fontWeight:700}}>{fmt(p.faturamento)}</td>
+                            <td style={{color:'var(--success)',fontWeight:600}}>{fmt(p.lucro)}</td>
+                            <td><span className={`badge ${p.lucro/p.faturamento>0.3?'badge-green':'badge-gold'}`}>{pct(p.lucro,p.faturamento)}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {tab==='vendedores'&&(
+            <div className="card">
+              <div className="card-title">Desempenho por vendedor</div>
+              {resultado.rankingVendedores.length===0?<div className="empty-state">Sem dados no período</div>:(
+                <div className="scroll-x">
+                  <table>
+                    <thead><tr><th>#</th><th>Vendedor</th><th>Pedidos</th><th>Faturamento</th><th>Lucro gerado</th><th>Ticket médio</th></tr></thead>
+                    <tbody>
+                      {resultado.rankingVendedores.map((v,i)=>(
+                        <tr key={v.nome} className={i===0?'highlight-row':''}>
+                          <td style={{color:'var(--text-muted)'}}>#{i+1}</td>
+                          <td style={{fontWeight:600}}>{v.nome}</td>
+                          <td><span className="badge badge-wine">{v.qtd}</span></td>
+                          <td style={{color:'var(--wine)',fontWeight:700}}>{fmt(v.total)}</td>
+                          <td style={{color:'var(--success)'}}>{fmt(v.lucro)}</td>
+                          <td style={{color:'var(--text-muted)'}}>{fmt(v.qtd>0?v.total/v.qtd:0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab==='compradores'&&(
+            <div className="card">
+              <div className="card-title">Clientes no período</div>
+              {resultado.rankingCompradores.length===0?<div className="empty-state">Sem dados no período</div>:(
+                <div className="scroll-x">
+                  <table>
+                    <thead><tr><th>#</th><th>Cliente</th><th>Cidade</th><th>Pedidos</th><th>Total gasto</th><th>Pendente</th></tr></thead>
+                    <tbody>
+                      {resultado.rankingCompradores.map((c,i)=>(
+                        <tr key={c.nome} className={i===0?'highlight-row':''}>
+                          <td style={{color:'var(--text-muted)'}}>#{i+1}</td>
+                          <td style={{fontWeight:600}}>{c.nome}</td>
+                          <td style={{color:'var(--text-muted)'}}>{c.cidade}</td>
+                          <td><span className="badge badge-wine">{c.qtd}</span></td>
+                          <td style={{color:'var(--wine)',fontWeight:700}}>{fmt(c.total)}</td>
+                          <td>{c.pendente>0?<span className="badge badge-gold">{fmt(c.pendente)}</span>:<span className="badge badge-green">Em dia</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab==='pendencias'&&(
+            <div className="card">
+              <div className="card-title">Cobranças pendentes</div>
+              {resultado.vendasPendentes.length===0?<div className="empty-state">🎉 Nenhuma pendência nesse período!</div>:(
+                <>
+                  <div style={{background:'var(--warning-bg)',color:'var(--warning)',padding:'10px 14px',borderRadius:8,marginBottom:12,fontSize:13,fontWeight:600}}>
+                    Total a receber: {fmt(resultado.pendente)} em {resultado.vendasPendentes.length} venda{resultado.vendasPendentes.length!==1?'s':''}
+                  </div>
+                  <div className="scroll-x">
+                    <table>
+                      <thead><tr><th>Data</th><th>Cliente</th><th>Cidade</th><th>Vendedor</th><th>Valor</th></tr></thead>
+                      <tbody>
+                        {resultado.vendasPendentes.map(v=>{
+                          const comp=compradores.find(c=>c.id===v.comprador_id);
+                          const vend=vendedores.find(x=>x.id===v.vendedor_id);
+                          return (
+                            <tr key={v.id}>
+                              <td style={{color:'var(--text-muted)'}}>{v.data?.split('-').reverse().join('/')}</td>
+                              <td style={{fontWeight:600}}>{comp?.nome||'—'}</td>
+                              <td style={{color:'var(--text-muted)'}}>{comp?.cidade||'—'}</td>
+                              <td style={{color:'var(--text-muted)'}}>{vend?.nome||'—'}</td>
+                              <td style={{fontWeight:700,color:'var(--warning)'}}>{fmt(v.total)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────
+function Dashboard() {
+  const { arr: produtos } = useFirestore('produtos');
+  const { arr: vendas } = useFirestore('vendas');
+  const { arr: feirinha } = useFirestore('feirinha');
+  const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
+  const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
+  const { arr: vendedores } = useFirestore('vendedores');
+
+  const totalVendas=vendas.reduce((a,v)=>a+v.total,0);
+  const lucroDelivery=vendas.reduce((a,v)=>a+(v.lucro||0),0);
+  const totalFeiras=feirinha.reduce((a,f)=>a+f.total,0);
+  const lucroFeiras=feirinha.reduce((a,f)=>a+(f.lucro||0),0);
+  const totalGeral=totalVendas+totalFeiras;
+  const totalLucro=lucroDelivery+lucroFeiras;
+  const pendentes=vendas.filter(v=>v.status==='pendente').reduce((a,v)=>a+v.total,0);
+  const pendentesQtd=vendas.filter(v=>v.status==='pendente').length;
+
+  const rankVendedores=vendedores.map(v=>({
+    nome:v.nome,
+    qtd:vendas.filter(vd=>vd.vendedor_id===v.id).length,
+    total:vendas.filter(vd=>vd.vendedor_id===v.id).reduce((a,vd)=>a+vd.total,0),
+  })).filter(v=>v.qtd>0).sort((a,b)=>b.total-a.total);
+
+  const prodMaisVendido=(()=>{
+    const c={};
+    vendas.forEach(v=>v.itens?.forEach(it=>{c[it.produto_id]=(c[it.produto_id]||0)+(parseInt(it.qtd)||0);}));
+    feirinha.forEach(f=>f.itens?.forEach(it=>{c[it.produto_id]=(c[it.produto_id]||0)+(parseInt(it.qtd)||0);}));
+    const max=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];
+    if(!max) return null;
+    const p=produtos.find(x=>x.id===max[0]);
+    return p?{nome:p.nome,qtd:max[1]}:null;
+  })();
+
+  return (
+    <div>
+      <div className="page-title">📊 Painel geral</div>
+      <div className="metric-grid">
+        <div className="metric"><div className="metric-label">Faturamento total</div><div className="metric-value">{fmt(totalGeral)}</div><div className="metric-sub">delivery + feirinha</div></div>
+        <div className="metric"><div className="metric-label">Lucro real</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(totalLucro)}</div><div className="metric-sub">descontado custo</div></div>
+        <div className="metric"><div className="metric-label">A receber</div><div className="metric-value" style={{color:pendentesQtd>0?'var(--warning)':'var(--success)'}}>{fmt(pendentes)}</div><div className="metric-sub">{pendentesQtd} pendente{pendentesQtd!==1?'s':''}</div></div>
+        <div className="metric"><div className="metric-label">Vendas delivery</div><div className="metric-value">{vendas.length}</div><div className="metric-sub">{fmt(totalVendas)}</div></div>
+        <div className="metric"><div className="metric-label">Vendas feirinha</div><div className="metric-value">{feirinha.length}</div><div className="metric-sub">{fmt(totalFeiras)}</div></div>
+        <div className="metric"><div className="metric-label">Produtos ativos</div><div className="metric-value">{produtos.filter(p=>p.ativo).length}</div><div className="metric-sub">de {produtos.length} cadastrados</div></div>
+      </div>
+
+      {prodMaisVendido&&(
+        <div className="card" style={{borderLeft:'4px solid var(--gold)'}}>
+          <div style={{fontWeight:700,color:'var(--wine)',marginBottom:2}}>⭐ Produto mais vendido</div>
+          <div style={{fontSize:16,fontWeight:600}}>{prodMaisVendido.nome}</div>
+          <div style={{fontSize:13,color:'var(--text-muted)'}}>{prodMaisVendido.qtd} unidades no total</div>
+        </div>
+      )}
+
+      {rankVendedores.length>0&&(
+        <div className="card">
+          <div className="card-title">Desempenho por vendedor</div>
+          <table>
+            <thead><tr><th>Vendedor</th><th>Qtd vendas</th><th>Total vendido</th></tr></thead>
+            <tbody>
+              {rankVendedores.map(v=>(
+                <tr key={v.nome}>
+                  <td style={{fontWeight:600}}>{v.nome}</td>
+                  <td><span className="badge badge-wine">{v.qtd}</span></td>
+                  <td style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {produtos.length>0&&(
+        <div className="card">
+          <div className="card-title">Estoque atual</div>
+          <div className="scroll-x">
+            <table>
+              <thead><tr><th>Produto</th><th>Margem</th><th>Stk Delivery</th><th>Stk Feirinha</th><th>Status</th></tr></thead>
+              <tbody>
+                {produtos.map(p=>{
+                  const margem=p.custo>0?((p.venda-p.custo)/p.venda*100).toFixed(1)+'%':'—';
+                  const edQtd=estoqueDelivery[p.id]?.qtd??0;
+                  const efQtd=estoqueFeirinha[p.id]?.qtd??0;
+                  return (
+                    <tr key={p.id} style={{opacity:p.ativo?1:0.45}}>
+                      <td style={{fontWeight:600}}>{p.nome}</td>
+                      <td><span className={`badge ${parseFloat(margem)>30?'badge-green':'badge-gold'}`}>{margem}</span></td>
+                      <td style={{color:edQtd===0?'var(--danger)':'var(--text)'}}>{edQtd}</td>
+                      <td style={{color:efQtd===0?'var(--danger)':'var(--text)'}}>{efQtd}</td>
+                      <td>{p.ativo?<span className="badge badge-green">Ativo</span>:<span className="badge badge-red">Inativo</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {produtos.length===0&&vendas.length===0&&(
+        <div className="card" style={{textAlign:'center',padding:'2.5rem'}}>
+          <div style={{fontSize:40,marginBottom:12}}>☕</div>
+          <div style={{fontWeight:700,fontSize:16,color:'var(--wine)',marginBottom:6}}>Bem-vinda ao Café & Tal!</div>
+          <div style={{color:'var(--text-muted)',fontSize:14}}>Comece cadastrando seus produtos, vendedores e compradores.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── APP ROOT ──────────────────────────────────────────────────────
+function App() {
+  const [ready, setReady] = useState(!!window._firebaseReady);
+  const [page, setPage] = useState('dashboard');
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(()=>{
+    if(!ready){
+      window.addEventListener('firebaseReady',()=>setReady(true),{once:true});
+    }
+  },[]);
+
+  const pages=[
+    {id:'dashboard',label:'📊 Painel'},
+    {id:'produtos',label:'☕ Produtos'},
+    {id:'vendedores',label:'👤 Vendedores'},
+    {id:'compradores',label:'🛍 Compradores'},
+    {id:'vendas',label:'🛒 Vendas'},
+    {id:'feirinha',label:'🏪 Feirinha'},
+    {id:'relatorio',label:'📈 Relatório'},
+  ];
+
+  if(!ready) return (
+    <div className="loading-screen" style={{height:'100vh'}}>
+      <div className="spinner"/>
+      <span style={{color:'var(--text-muted)'}}>Conectando ao Firebase...</span>
+    </div>
+  );
+
+  return (
+    <div className="app">
+      <div className="topbar no-print">
+        <div className="topbar-logo">CAFÉ <span>&</span> TAL</div>
+        <nav className="nav">
+          {pages.map(p=>(
+            <button key={p.id} className={`nav-btn ${page===p.id?'active':''}`} onClick={()=>setPage(p.id)}>{p.label}</button>
+          ))}
+        </nav>
+        <span className={`sync-dot ${syncing?'syncing':''}`} title={syncing?'Salvando...':'Sincronizado'}/>
+      </div>
+      <main className="main">
+        {page==='dashboard'&&<Dashboard/>}
+        {page==='produtos'&&<Produtos syncing={syncing} setSyncing={setSyncing}/>}
+        {page==='vendedores'&&<Vendedores syncing={syncing} setSyncing={setSyncing}/>}
+        {page==='compradores'&&<Compradores syncing={syncing} setSyncing={setSyncing}/>}
+        {page==='vendas'&&<Vendas syncing={syncing} setSyncing={setSyncing}/>}
+        {page==='feirinha'&&<Feirinha syncing={syncing} setSyncing={setSyncing}/>}
+        {page==='relatorio'&&<Relatorio/>}
+      </main>
+      <footer className="no-print" style={{background:'var(--wine)',padding:'20px 28px',fontFamily:"'Geist',system-ui,sans-serif",marginTop:'auto'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12,maxWidth:960,margin:'0 auto'}}>
+          <div>
+            <div style={{fontSize:'0.88rem',color:'rgba(255,255,255,0.95)',lineHeight:1.4}}>
+              <span style={{fontWeight:400}}>Developed by </span><span style={{fontWeight:600,color:'var(--gold)'}}>Datum Studio</span>
+            </div>
+
+          </div>
+          <div style={{textAlign:'right',color:'rgba(255,255,255,0.72)',fontSize:'0.72rem',lineHeight:1.7}}>
+            <div style={{fontWeight:500,color:'var(--gold-light)'}}>Café & Tal · Sistema de Gestão</div>
+            <div style={{opacity:0.8}}>v1.0.0</div>
+            <div>© <span id="footer-ano">2026</span></div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const el = document.getElementById('footer-ano');
+    if (el) el.textContent = new Date().getFullYear();
+  });
+</script>
+</body>
+</html>

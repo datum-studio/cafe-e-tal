@@ -197,7 +197,8 @@ if ('serviceWorker' in navigator) {
     .content-area { padding: 1rem; padding-bottom: 80px; }
   }
   .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border); z-index: 100; padding: 6px 0 env(safe-area-inset-bottom); }
-  .bottom-nav-inner { display: flex; justify-content: space-around; }
+  .bottom-nav-inner { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 4px; }
+  .bottom-nav-inner::-webkit-scrollbar { display: none; }
   .bnav-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 8px; border: none; background: none; cursor: pointer; border-radius: 8px; min-width: 44px; }
   .bnav-btn .bnav-icon { font-size: 20px; }
   .bnav-btn .bnav-label { font-size: 9px; font-weight: 600; color: var(--text-muted); }
@@ -762,6 +763,17 @@ function Vendas({ syncing, setSyncing }) {
           <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={addItem}>+ Adicionar item</button>
           <div className="separator"/>
           <div className="total-row"><span style={{color:'var(--text-muted)'}}>Subtotal</span><span>{fmt(calcSubtotal(form.itens))}</span></div>
+          {(()=>{
+            const custoTotal = form.itens.reduce((acc,it)=>{ const p=produtos.find(x=>x.id===it.produto_id); return acc+(p?p.custo*(parseInt(it.qtd)||0):0); },0);
+            const lucroBase = calcSubtotal(form.itens) - custoTotal;
+            return custoTotal>0 ? (
+              <div style={{display:'flex',gap:16,padding:'6px 0',fontSize:12,color:'var(--text-muted)',borderBottom:'1px dashed var(--border)'}}>
+                <span>Custo total: <strong style={{color:'var(--danger)'}}>{fmt(custoTotal)}</strong></span>
+                <span>Lucro base: <strong style={{color:'var(--success)'}}>{fmt(lucroBase)}</strong></span>
+                <span style={{opacity:0.7}}>← limite do desconto</span>
+              </div>
+            ) : null;
+          })()}
           <div style={{display:'flex',gap:8,alignItems:'flex-end',margin:'6px 0'}}>
             <div className="field" style={{margin:0,width:140}}>
               <label>Desconto</label>
@@ -1752,8 +1764,6 @@ function Producao() {
     return { itens, vendas: vendasFiltradas, total: totalGeral, porComprador };
   }, [gerado, filtro, vendas, compradores, produtos]);
 
-  const maxQtd = resultado?.itens?.[0]?.qtd || 1;
-
   function textoWhats() {
     if (!resultado) return '';
     let t = `📦 *LISTA DE PRODUÇÃO — ${filtro.cidade.toUpperCase()}*
@@ -1825,64 +1835,34 @@ function Producao() {
 
       {resultado && resultado.itens.length > 0 && (
         <>
-          {/* Cards de resumo */}
-          <div className="metric-grid">
-            <div className="metric">
-              <div className="metric-label">Cidade</div>
-              <div className="metric-value" style={{ fontSize: 16 }}>{filtro.cidade}</div>
-            </div>
-            <div className="metric">
-              <div className="metric-label">Pedidos no período</div>
-              <div className="metric-value">{resultado.vendas.length}</div>
-            </div>
-            <div className="metric">
-              <div className="metric-label">Itens distintos</div>
-              <div className="metric-value">{resultado.itens.length}</div>
-            </div>
-            <div className="metric">
-              <div className="metric-label">Total a faturar</div>
-              <div className="metric-value">{fmt(resultado.total)}</div>
-            </div>
+          {/* Cabeçalho simples */}
+          <div style={{marginBottom:12,fontSize:13,color:'var(--text-muted)'}}>
+            {filtro.cidade} · {resultado.vendas.length} pedido{resultado.vendas.length!==1?'s':''} · {filtro.de.split('-').reverse().join('/')} a {filtro.ate.split('-').reverse().join('/')}
           </div>
 
-          {/* Lista de produção principal */}
-          <div className="card" style={{ borderLeft: '4px solid var(--wine)' }}>
+          {/* Lista de produção — limpa e direta */}
+          <div className="card" style={{borderLeft:'4px solid var(--wine)'}}>
             <div className="card-title">O que produzir</div>
-            {resultado.itens.map((it, i) => (
-              <div key={it.id} style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 20 }}>#{i + 1}</span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>{it.nome}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{fmt(it.total)}</span>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--wine)', minWidth: 60, textAlign: 'right' }}>{it.qtd} un</span>
-                  </div>
+            <div style={{display:'flex',flexDirection:'column',gap:2}}>
+              {resultado.itens.map((it, i) => (
+                <div key={it.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:i<resultado.itens.length-1?'1px solid var(--cream-dark)':'none'}}>
+                  <span style={{fontSize:15,color:'var(--text)'}}>{it.nome}</span>
+                  <span style={{fontSize:22,fontWeight:700,color:'var(--wine)',minWidth:70,textAlign:'right'}}>{it.qtd} <span style={{fontSize:13,fontWeight:400,color:'var(--text-muted)'}}>un</span></span>
                 </div>
-                <div className="bar-bg"><div className="bar-fill" style={{ width: `${(it.qtd / maxQtd) * 100}%` }} /></div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           {/* Detalhe por comprador */}
           <div className="card">
-            <div className="card-title">Detalhamento por cliente</div>
+            <div className="card-title">Por cliente</div>
             {resultado.porComprador.map((c, i) => (
-              <div key={i} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: i < resultado.porComprador.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <div style={{ fontWeight: 700 }}>{c.nome}</div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: 'var(--wine)', fontWeight: 600 }}>{fmt(c.total)}</span>
-                    <span className={`badge ${c.status === 'pago' ? 'badge-green' : c.status === 'pendente' ? 'badge-gold' : 'badge-wine'}`}>
-                      {c.status === 'pago' ? '✅ Pago' : c.status === 'pendente' ? '⏳ Pendente' : '⚠ Misto'}
-                    </span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <div key={i} style={{marginBottom:12,paddingBottom:12,borderBottom:i<resultado.porComprador.length-1?'1px solid var(--cream-dark)':'none'}}>
+                <div style={{fontWeight:700,marginBottom:5}}>{c.nome}</div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
                   {c.itens.map((it, j) => (
-                    <span key={j} style={{ background: 'var(--cream-dark)', borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>
-                      {it.nome} <span style={{ color: 'var(--wine)' }}>×{it.qtd}</span>
+                    <span key={j} style={{background:'var(--cream-dark)',borderRadius:6,padding:'4px 12px',fontSize:13,fontWeight:600}}>
+                      {it.nome} <span style={{color:'var(--wine)'}}>×{it.qtd}</span>
                     </span>
                   ))}
                 </div>

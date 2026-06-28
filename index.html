@@ -272,9 +272,19 @@ function Produtos({ syncing, setSyncing }) {
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
   const [form, setForm] = useState({ nome:'', custo:'', venda:'' });
   const [estoqueEdit, setEstoqueEdit] = useState(null);
+  const [nomeEdit, setNomeEdit] = useState(null);
   const [alert, setAlert] = useState(null);
 
   function showAlert(tipo, msg) { setAlert({tipo,msg}); setTimeout(()=>setAlert(null),2500); }
+
+  async function salvarNome() {
+    if(!nomeEdit.nome.trim()) return;
+    setSyncing(true);
+    const p = produtos.find(x=>x.id===nomeEdit.id);
+    await saveDoc('produtos', nomeEdit.id, {...p, nome:nomeEdit.nome.trim()});
+    setNomeEdit(null);
+    setSyncing(false);
+  }
 
   async function salvar() {
     if (!form.nome||!form.venda) return showAlert('danger','Preencha nome e preço de venda.');
@@ -327,6 +337,19 @@ function Produtos({ syncing, setSyncing }) {
         <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Cadastrar produto</button>
       </div>
 
+      {nomeEdit && (
+        <div className="card" style={{borderColor:'var(--gold)'}}>
+          <div className="card-title">Editar nome do produto</div>
+          <div className="form-row">
+            <div className="field"><label>Nome</label><input value={nomeEdit.nome} onChange={e=>setNomeEdit(n=>({...n,nome:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&salvarNome()}/></div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-gold" onClick={salvarNome} disabled={syncing}>Salvar nome</button>
+            <button className="btn btn-ghost" onClick={()=>setNomeEdit(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
       {estoqueEdit && (
         <div className="card" style={{borderColor:'var(--gold)'}}>
           <div className="card-title">Ajustar estoque — {produtos.find(p=>p.id===estoqueEdit.id)?.nome}</div>
@@ -359,6 +382,7 @@ function Produtos({ syncing, setSyncing }) {
                     <td>{estoqueFeirinha[p.id]?.qtd??0}</td>
                     <td><label className="toggle"><input type="checkbox" checked={!!p.ativo} onChange={()=>toggleAtivo(p)}/><span className="toggle-slider"/></label></td>
                     <td style={{display:'flex',gap:4}}>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setNomeEdit({id:p.id,nome:p.nome})}>✏</button>
                       <button className="btn btn-ghost btn-sm" onClick={()=>setEstoqueEdit({id:p.id,delivery:estoqueDelivery[p.id]?.qtd??0,feirinha:estoqueFeirinha[p.id]?.qtd??0})}>Estoque</button>
                       <button className="btn btn-danger btn-sm" onClick={()=>excluir(p.id)}>✕</button>
                     </td>
@@ -440,9 +464,19 @@ function Compradores({ syncing, setSyncing }) {
   const { arr: compradores, loading } = useFirestore('compradores');
   const { arr: vendas } = useFirestore('vendas');
   const [form, setForm] = useState({nome:'',telefone:'',cidade:'',endereco:''});
+  const [editando, setEditando] = useState(null);
   const [alert, setAlert] = useState(null);
 
   function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
+
+  async function salvarEdicao() {
+    if(!editando.nome.trim()||!editando.cidade.trim()) return showAlert('danger','Nome e cidade são obrigatórios.');
+    setSyncing(true);
+    await saveDoc('compradores', editando.id, {nome:editando.nome.trim(),telefone:editando.telefone,cidade:editando.cidade.trim(),endereco:editando.endereco});
+    setEditando(null);
+    showAlert('success','Comprador atualizado!');
+    setSyncing(false);
+  }
 
   async function salvar() {
     if(!form.nome||!form.cidade) return showAlert('danger','Nome e cidade são obrigatórios.');
@@ -476,6 +510,22 @@ function Compradores({ syncing, setSyncing }) {
         </div>
         <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Cadastrar comprador</button>
       </div>
+      {editando && (
+        <div className="card" style={{borderColor:'var(--gold)'}}>
+          <div className="card-title">Editar comprador</div>
+          <div className="form-row cols2">
+            <div className="field"><label>Nome</label><input value={editando.nome} onChange={e=>setEditando(x=>({...x,nome:e.target.value}))}/></div>
+            <div className="field"><label>Telefone</label><input value={editando.telefone} onChange={e=>setEditando(x=>({...x,telefone:e.target.value}))}/></div>
+            <div className="field"><label>Cidade</label><input value={editando.cidade} onChange={e=>setEditando(x=>({...x,cidade:e.target.value}))}/></div>
+            <div className="field"><label>Endereço</label><input value={editando.endereco} onChange={e=>setEditando(x=>({...x,endereco:e.target.value}))}/></div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-gold" onClick={salvarEdicao} disabled={syncing}>Salvar alterações</button>
+            <button className="btn btn-ghost" onClick={()=>setEditando(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <table>
           <thead><tr><th>Nome</th><th>Cidade</th><th>Telefone</th><th>Situação</th><th></th></tr></thead>
@@ -489,7 +539,7 @@ function Compradores({ syncing, setSyncing }) {
                   <td style={{color:'var(--text-muted)'}}>{c.cidade}</td>
                   <td style={{color:'var(--text-muted)'}}>{c.telefone||'—'}</td>
                   <td>{pendente?<span className="badge badge-gold">⚠ Pendente</span>:<span className="badge badge-green">Em dia</span>}</td>
-                  <td><button className="btn btn-danger btn-sm" onClick={()=>excluir(c.id)}>✕</button></td>
+                  <td style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-sm" onClick={()=>setEditando({...c})}>✏</button><button className="btn btn-danger btn-sm" onClick={()=>excluir(c.id)}>✕</button></td>
                 </tr>
               );
             })}
@@ -508,9 +558,10 @@ function Vendas({ syncing, setSyncing }) {
   const { arr: vendas, loading } = useFirestore('vendas');
   const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
   const [tab, setTab] = useState('nova');
-  const [form, setForm] = useState({comprador_id:'',vendedor_id:'',data:hoje(),itens:[{produto_id:'',qtd:1}],obs:'',status:'pendente'});
+  const [form, setForm] = useState({comprador_id:'',vendedor_id:'',data:hoje(),itens:[{produto_id:'',qtd:1}],obs:'',status:'pendente',desconto_tipo:'pct',desconto_valor:''});
   const [alert, setAlert] = useState(null);
   const [notaModal, setNotaModal] = useState(null);
+  const [editandoVenda, setEditandoVenda] = useState(null);
   const [filtro, setFiltro] = useState('todos');
 
   function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
@@ -518,17 +569,28 @@ function Vendas({ syncing, setSyncing }) {
   function removeItem(i){setForm(f=>({...f,itens:f.itens.filter((_,idx)=>idx!==i)}));}
   function setItem(i,key,val){setForm(f=>({...f,itens:f.itens.map((it,idx)=>idx===i?{...it,[key]:val}:it)}));}
 
-  function calcTotal(itens){
+  function calcSubtotal(itens){
     return itens.reduce((acc,it)=>{
       const p=produtos.find(x=>x.id===it.produto_id);
       return acc+(p?p.venda*(parseInt(it.qtd)||0):0);
     },0);
   }
-  function calcLucro(itens){
-    return itens.reduce((acc,it)=>{
+  function calcDesconto(itens, tipo, valor){
+    const sub=calcSubtotal(itens);
+    if(!valor||parseFloat(valor)<=0) return 0;
+    if(tipo==='pct') return sub*(parseFloat(valor)/100);
+    return Math.min(parseFloat(valor),sub);
+  }
+  function calcTotal(itens, tipo, valor){
+    return Math.max(0, calcSubtotal(itens)-calcDesconto(itens,tipo||'pct',valor||''));
+  }
+  function calcLucro(itens, tipo, valor){
+    const lucroBase=itens.reduce((acc,it)=>{
       const p=produtos.find(x=>x.id===it.produto_id);
       return acc+(p?(p.venda-p.custo)*(parseInt(it.qtd)||0):0);
     },0);
+    const desc=calcDesconto(itens,tipo||'pct',valor||'');
+    return Math.max(0,lucroBase-desc);
   }
 
   async function salvar() {
@@ -537,7 +599,8 @@ function Vendas({ syncing, setSyncing }) {
     setSyncing(true);
     try {
       const id = uid();
-      const venda = {...form, id, total:calcTotal(form.itens), lucro:calcLucro(form.itens), criado_em:new Date().toISOString()};
+      const descValor=calcDesconto(form.itens,form.desconto_tipo,form.desconto_valor);
+      const venda = {...form, id, subtotal:calcSubtotal(form.itens), desconto:descValor, total:calcTotal(form.itens,form.desconto_tipo,form.desconto_valor), lucro:calcLucro(form.itens,form.desconto_tipo,form.desconto_valor), criado_em:new Date().toISOString()};
       await saveDoc('vendas', id, venda);
       // baixa estoque delivery
       for(const it of form.itens){
@@ -564,6 +627,44 @@ function Vendas({ syncing, setSyncing }) {
     setSyncing(false);
   }
 
+  function abrirEdicao(venda) {
+    setEditandoVenda({
+      id: venda.id,
+      comprador_id: venda.comprador_id,
+      vendedor_id: venda.vendedor_id,
+      data: venda.data,
+      itens: venda.itens ? [...venda.itens.map(it=>({...it}))] : [{produto_id:'',qtd:1}],
+      obs: venda.obs||'',
+      status: venda.status,
+      desconto_tipo: venda.desconto_tipo||'pct',
+      desconto_valor: venda.desconto_valor||'',
+    });
+    setTab('editar');
+  }
+
+  async function salvarEdicaoVenda() {
+    if(!editandoVenda.comprador_id||!editandoVenda.vendedor_id) return showAlert('danger','Selecione comprador e vendedor.');
+    if(editandoVenda.itens.some(it=>!it.produto_id||!it.qtd)) return showAlert('danger','Preencha todos os itens.');
+    setSyncing(true);
+    try {
+      const descValor = calcDesconto(editandoVenda.itens, editandoVenda.desconto_tipo, editandoVenda.desconto_valor);
+      const total = calcTotal(editandoVenda.itens, editandoVenda.desconto_tipo, editandoVenda.desconto_valor);
+      const lucro = calcLucro(editandoVenda.itens, editandoVenda.desconto_tipo, editandoVenda.desconto_valor);
+      const vendaAtualizada = {
+        ...editandoVenda,
+        subtotal: calcSubtotal(editandoVenda.itens),
+        desconto: descValor,
+        total,
+        lucro,
+      };
+      await saveDoc('vendas', editandoVenda.id, vendaAtualizada);
+      showAlert('success','Venda atualizada!');
+      setEditandoVenda(null);
+      setTab('lista');
+    } catch(e){ showAlert('danger','Erro ao salvar.'); }
+    setSyncing(false);
+  }
+
   function gerarNota(venda) {
     const comp = compradores.find(c=>c.id===venda.comprador_id);
     const vend = vendedores.find(v=>v.id===venda.vendedor_id);
@@ -579,7 +680,12 @@ function Vendas({ syncing, setSyncing }) {
       const p=produtos.find(x=>x.id===it.produto_id);
       if(p) t+=`• ${p.nome} x${it.qtd} = ${fmt(p.venda*it.qtd)}\n`;
     });
-    t+=`━━━━━━━━━━━━━━━━━━━━\n💰 *TOTAL: ${fmt(venda.total)}*\n`;
+    t+=`━━━━━━━━━━━━━━━━━━━━\n`;
+    if(venda.desconto>0) {
+      t+=`🏷 Subtotal: ${fmt(venda.subtotal)}\n`;
+      t+=`🎁 Desconto: − ${fmt(venda.desconto)}\n`;
+    }
+    t+=`💰 *TOTAL: ${fmt(venda.total)}*\n`;
     if(venda.obs) t+=`📝 ${venda.obs}\n`;
     t+=`\nStatus: ${venda.status==='pago'?'✅ PAGO':'⏳ AGUARDANDO PAGAMENTO'}\n\nObrigada pela preferência! 🙏☕`;
     setNotaModal({texto:t,venda,comp});
@@ -600,6 +706,7 @@ function Vendas({ syncing, setSyncing }) {
         <button className={`tab-btn ${tab==='pendentes'?'active':''}`} onClick={()=>setTab('pendentes')}>
           Pendências {pendentesQtd>0&&<span className="badge badge-gold" style={{marginLeft:4}}>{pendentesQtd}</span>}
         </button>
+        {editandoVenda&&<button className={`tab-btn ${tab==='editar'?'active':''}`} onClick={()=>setTab('editar')} style={{color:'var(--warning)'}}>✏ Editando</button>}
       </div>
 
       {tab==='nova'&&(
@@ -643,7 +750,24 @@ function Vendas({ syncing, setSyncing }) {
           ))}
           <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={addItem}>+ Adicionar item</button>
           <div className="separator"/>
-          <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens))}</span></div>
+          <div className="total-row"><span style={{color:'var(--text-muted)'}}>Subtotal</span><span>{fmt(calcSubtotal(form.itens))}</span></div>
+          <div style={{display:'flex',gap:8,alignItems:'flex-end',margin:'6px 0'}}>
+            <div className="field" style={{margin:0,width:140}}>
+              <label>Desconto</label>
+              <select value={form.desconto_tipo} onChange={e=>setForm(f=>({...f,desconto_tipo:e.target.value,desconto_valor:''}))}>
+                <option value="pct">Porcentagem (%)</option>
+                <option value="val">Valor fixo (R$)</option>
+              </select>
+            </div>
+            <div className="field" style={{margin:0,width:100}}>
+              <label>{form.desconto_tipo==='pct'?'%':'R$'}</label>
+              <input type="number" min="0" step={form.desconto_tipo==='pct'?'1':'0.01'} value={form.desconto_valor} onChange={e=>setForm(f=>({...f,desconto_valor:e.target.value}))} placeholder={form.desconto_tipo==='pct'?'0':'0,00'}/>
+            </div>
+            {calcDesconto(form.itens,form.desconto_tipo,form.desconto_valor)>0&&(
+              <span style={{fontSize:13,color:'var(--success)',fontWeight:600,paddingBottom:2}}>− {fmt(calcDesconto(form.itens,form.desconto_tipo,form.desconto_valor))}</span>
+            )}
+          </div>
+          <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens,form.desconto_tipo,form.desconto_valor))}</span></div>
           <div className="separator"/>
           <div className="form-row"><div className="field"><label>Observações</label><textarea value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))} rows={2} placeholder="Ex: Entregar à tarde..."/></div></div>
           <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
@@ -655,6 +779,83 @@ function Vendas({ syncing, setSyncing }) {
               </select>
             </div>
             <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
+          </div>
+        </div>
+      )}
+
+      {tab==='editar'&&editandoVenda&&(
+        <div className="card">
+          {alert&&<div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+          <div className="card-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span>Editar venda</span>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{setEditandoVenda(null);setTab('lista');}}>Cancelar</button>
+          </div>
+          <div className="form-row cols3">
+            <div className="field"><label>Comprador</label>
+              <select value={editandoVenda.comprador_id} onChange={e=>setEditandoVenda(v=>({...v,comprador_id:e.target.value}))}>
+                <option value="">Selecionar...</option>
+                {compradores.map(c=><option key={c.id} value={c.id}>{c.nome} — {c.cidade}</option>)}
+              </select>
+            </div>
+            <div className="field"><label>Vendedor</label>
+              <select value={editandoVenda.vendedor_id} onChange={e=>setEditandoVenda(v=>({...v,vendedor_id:e.target.value}))}>
+                <option value="">Selecionar...</option>
+                {vendedores.map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}
+              </select>
+            </div>
+            <div className="field"><label>Data</label><input type="date" value={editandoVenda.data} onChange={e=>setEditandoVenda(v=>({...v,data:e.target.value}))}/></div>
+          </div>
+          <div className="separator"/>
+          <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS DO PEDIDO</div>
+          {editandoVenda.itens.map((it,i)=>(
+            <div key={i} className="item-linha">
+              <div className="field" style={{flex:2}}>
+                {i===0&&<label>Produto</label>}
+                <select value={it.produto_id} onChange={e=>setEditandoVenda(v=>({...v,itens:v.itens.map((x,idx)=>idx===i?{...x,produto_id:e.target.value}:x)}))}>
+                  <option value="">Selecionar...</option>
+                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome} — {fmt(p.venda)}</option>)}
+                </select>
+              </div>
+              <div className="field" style={{width:70}}>
+                {i===0&&<label>Qtd</label>}
+                <input type="number" min="1" value={it.qtd} onChange={e=>setEditandoVenda(v=>({...v,itens:v.itens.map((x,idx)=>idx===i?{...x,qtd:e.target.value}:x)}))}/>
+              </div>
+              <div style={{paddingBottom:2}}>
+                <button className="btn btn-ghost btn-sm" onClick={()=>setEditandoVenda(v=>({...v,itens:v.itens.filter((_,idx)=>idx!==i)}))} disabled={editandoVenda.itens.length===1}>✕</button>
+              </div>
+            </div>
+          ))}
+          <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={()=>setEditandoVenda(v=>({...v,itens:[...v.itens,{produto_id:'',qtd:1}]}))}>+ Adicionar item</button>
+          <div className="separator"/>
+          <div className="total-row"><span style={{color:'var(--text-muted)'}}>Subtotal</span><span>{fmt(calcSubtotal(editandoVenda.itens))}</span></div>
+          <div style={{display:'flex',gap:8,alignItems:'flex-end',margin:'6px 0'}}>
+            <div className="field" style={{margin:0,width:140}}>
+              <label>Desconto</label>
+              <select value={editandoVenda.desconto_tipo} onChange={e=>setEditandoVenda(v=>({...v,desconto_tipo:e.target.value,desconto_valor:''}))}>
+                <option value="pct">Porcentagem (%)</option>
+                <option value="val">Valor fixo (R$)</option>
+              </select>
+            </div>
+            <div className="field" style={{margin:0,width:100}}>
+              <label>{editandoVenda.desconto_tipo==='pct'?'%':'R$'}</label>
+              <input type="number" min="0" step={editandoVenda.desconto_tipo==='pct'?'1':'0.01'} value={editandoVenda.desconto_valor} onChange={e=>setEditandoVenda(v=>({...v,desconto_valor:e.target.value}))} placeholder={editandoVenda.desconto_tipo==='pct'?'0':'0,00'}/>
+            </div>
+            {calcDesconto(editandoVenda.itens,editandoVenda.desconto_tipo,editandoVenda.desconto_valor)>0&&(
+              <span style={{fontSize:13,color:'var(--success)',fontWeight:600,paddingBottom:2}}>− {fmt(calcDesconto(editandoVenda.itens,editandoVenda.desconto_tipo,editandoVenda.desconto_valor))}</span>
+            )}
+          </div>
+          <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(editandoVenda.itens,editandoVenda.desconto_tipo,editandoVenda.desconto_valor))}</span></div>
+          <div className="separator"/>
+          <div className="form-row"><div className="field"><label>Observações</label><textarea value={editandoVenda.obs} onChange={e=>setEditandoVenda(v=>({...v,obs:e.target.value}))} rows={2}/></div></div>
+          <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
+            <div className="field" style={{margin:0}}>
+              <label>Pagamento</label>
+              <select value={editandoVenda.status} onChange={e=>setEditandoVenda(v=>({...v,status:e.target.value}))}>
+                <option value="pendente">Aguardando pagamento</option>
+                <option value="pago">Já pago</option>
+              </select>
+            </div>
+            <button className="btn btn-primary" onClick={salvarEdicaoVenda} disabled={syncing}>Salvar alterações</button>
           </div>
         </div>
       )}
@@ -688,6 +889,7 @@ function Vendas({ syncing, setSyncing }) {
                         </span>
                       </td>
                       <td style={{display:'flex',gap:4}}>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>abrirEdicao(v)}>✏</button>
                         <button className="btn btn-gold btn-sm" onClick={()=>gerarNota(v)}>📋 Nota</button>
                         <button className="btn btn-danger btn-sm" onClick={()=>excluirVenda(v.id)}>✕</button>
                       </td>

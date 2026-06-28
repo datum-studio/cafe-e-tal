@@ -391,8 +391,8 @@ function Vendedores({ syncing, setSyncing }) {
   function gerarResumoVendedor(v) {
     const vendasVend = vendas.filter(vd =>
       vd.vendedor_id === v.id &&
-      vd.data >= filtroPeriodo.de &&
-      vd.data <= filtroPeriodo.ate
+      (!filtroPeriodo.de || vd.data >= filtroPeriodo.de) &&
+      (!filtroPeriodo.ate || vd.data <= filtroPeriodo.ate)
     ).sort((a,b) => a.data.localeCompare(b.data));
 
     if (vendasVend.length === 0) {
@@ -764,8 +764,8 @@ function Vendas({ syncing, setSyncing }) {
     }
     t+=`💰 *TOTAL: ${fmt(venda.total)}*\n`;
     if(venda.obs) t+=`📝 ${venda.obs}\n`;
-    if(venda.status==='pago') t+=`\\n✅ *PAGAMENTO CONFIRMADO*\\n`;
-    t+=`\\nObrigada pela preferência! 🙏☕`;
+    if(venda.status==='pago') t+=`\n✅ *PAGAMENTO CONFIRMADO*\n`;
+    t+=`\nObrigada pela preferência! 🙏☕`;
     setNotaModal({texto:t,venda,comp});
   }
 
@@ -1053,6 +1053,7 @@ function Feirinha({ syncing, setSyncing }) {
   const { arr: feirinha, loading } = useFirestore('feirinha');
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
   const { arr: feirasCadastro } = useFirestore('feiras_cadastro');
+  const { arr: participacoes } = useFirestore('participacoes');
   const [tab, setTab] = useState('nova');
   const [form, setForm] = useState({participacao_id:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
   const [alert, setAlert] = useState(null);
@@ -1252,6 +1253,119 @@ function Feirinha({ syncing, setSyncing }) {
   );
 }
 
+
+// ── RELATÓRIO POR FEIRA ────────────────────────────────────────
+function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
+  const [feiraId, setFeiraId] = useState('');
+  const [partId, setPartId] = useState('');
+
+  const partsDaFeira = useMemo(() =>
+    participacoes.filter(p => !feiraId || p.feira_id === feiraId)
+      .sort((a,b) => b.data_inicio.localeCompare(a.data_inicio)),
+    [participacoes, feiraId]
+  );
+
+  const resultado = useMemo(() => {
+    if (!partId && !feiraId) return null;
+    const vendasFiltradas = feirinha.filter(v =>
+      partId ? v.participacao_id === partId : partsDaFeira.some(p => p.id === v.participacao_id)
+    );
+    if (!vendasFiltradas.length) return { itens: [], total: 0, lucro: 0, inscricao: 0 };
+
+    // Produtos
+    const contagem = {};
+    vendasFiltradas.forEach(v => v.itens?.forEach(it => {
+      if (!contagem[it.produto_id]) contagem[it.produto_id] = 0;
+      contagem[it.produto_id] += parseInt(it.qtd) || 0;
+    }));
+    const itens = Object.entries(contagem)
+      .map(([id, qtd]) => ({ nome: produtos.find(p => p.id === id)?.nome || '?', qtd }))
+      .sort((a,b) => b.qtd - a.qtd);
+
+    const total = vendasFiltradas.reduce((a,v) => a + v.total, 0);
+    const lucroBase = vendasFiltradas.reduce((a,v) => a + (v.lucro||0), 0);
+
+    // Inscrições (uma por participação)
+    const contadas = new Set();
+    const inscricao = vendasFiltradas.reduce((a,v) => {
+      if (v.participacao_id && !contadas.has(v.participacao_id)) {
+        contadas.add(v.participacao_id);
+        const p = participacoes.find(x => x.id === v.participacao_id);
+        return a + (p?.inscricao || 0);
+      }
+      return a;
+    }, 0);
+    const lucro = Math.max(0, lucroBase - inscricao);
+
+    // Participações envolvidas
+    const partsEnvolvidas = [...contadas].map(id => participacoes.find(p => p.id === id)).filter(Boolean);
+
+    return { itens, total, lucro, inscricao, partsEnvolvidas, qtdVendas: vendasFiltradas.length };
+  }, [partId, feiraId, feirinha, participacoes, partsDaFeira, produtos]);
+
+  return (
+    <div>
+      <div className="form-row cols2" style={{marginBottom:12}}>
+        <div className="field">
+          <label>Feira</label>
+          <select value={feiraId} onChange={e=>{setFeiraId(e.target.value);setPartId('');}}>
+            <option value="">Todas as feiras</option>
+            {feirasCadastro.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Participação específica</label>
+          <select value={partId} onChange={e=>setPartId(e.target.value)}>
+            <option value="">Todas as participações</option>
+            {partsDaFeira.map(p=>{
+              const ini=p.data_inicio?.split('-').reverse().join('/');
+              const fim=p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:'';
+              return <option key={p.id} value={p.id}>{p.feira_nome} · {ini}{fim}</option>;
+            })}
+          </select>
+        </div>
+      </div>
+
+      {!resultado && <div className="empty-state">Selecione uma feira ou participação acima.</div>}
+
+      {resultado && resultado.itens.length === 0 && <div className="empty-state">Nenhuma venda encontrada.</div>}
+
+      {resultado && resultado.itens.length > 0 && (
+        <>
+          <div className="metric-grid">
+            <div className="metric"><div className="metric-label">Vendas</div><div className="metric-value">{resultado.qtdVendas}</div></div>
+            <div className="metric"><div className="metric-label">Faturamento</div><div className="metric-value">{fmt(resultado.total)}</div></div>
+            {resultado.inscricao>0&&<div className="metric"><div className="metric-label">Inscrição(ões)</div><div className="metric-value" style={{color:'var(--danger)'}}>{fmt(resultado.inscricao)}</div></div>}
+            <div className="metric"><div className="metric-label">Lucro líquido</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(resultado.lucro)}</div><div className="metric-sub">{resultado.lucro>0?'✅ Valeu a pena':'⚠ Prejuízo'}</div></div>
+          </div>
+
+          <div className="card" style={{borderLeft:'4px solid var(--wine)'}}>
+            <div className="card-title">Itens vendidos</div>
+            {resultado.itens.map((it,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:i<resultado.itens.length-1?'1px solid var(--cream-dark)':'none'}}>
+                <span style={{fontSize:15}}>{it.nome}</span>
+                <span style={{fontSize:22,fontWeight:700,color:'var(--wine)'}}>{it.qtd} <span style={{fontSize:13,fontWeight:400,color:'var(--text-muted)'}}>un</span></span>
+              </div>
+            ))}
+          </div>
+
+          {resultado.partsEnvolvidas.length > 1 && (
+            <div className="card">
+              <div className="card-title">Participações incluídas</div>
+              {resultado.partsEnvolvidas.map(p=>(
+                <div key={p.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',fontSize:13,borderBottom:'1px solid var(--cream-dark)'}}>
+                  <span>{p.feira_nome} · {p.data_inicio?.split('-').reverse().join('/')}{p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:''}  </span>
+                  <span style={{color:'var(--danger)'}}>insc. {fmt(p.inscricao)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── RELATÓRIO ─────────────────────────────────────────────────────
 function Relatorio() {
   const { arr: produtos } = useFirestore('produtos');
@@ -1259,6 +1373,8 @@ function Relatorio() {
   const { arr: compradores } = useFirestore('compradores');
   const { arr: vendas } = useFirestore('vendas');
   const { arr: feirinha } = useFirestore('feirinha');
+  const { arr: participacoes } = useFirestore('participacoes');
+  const { arr: feirasCadastro } = useFirestore('feiras_cadastro');
   const [filtro, setFiltro] = useState({de:primeiroDiaMes(),ate:hoje(),canal:'todos',vendedor_id:''});
   const [gerado, setGerado] = useState(false);
   const [tab, setTab] = useState('resumo');
@@ -1351,6 +1467,12 @@ function Relatorio() {
               {vendedores.map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}
             </select>
           </div>
+          <div className="field"><label>Feira</label>
+            <select value={filtro.feira_id||''} onChange={e=>setFiltro(f=>({...f,feira_id:e.target.value}))}>
+              <option value="">Todas</option>
+              {feirasCadastro.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+            </select>
+          </div>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
           <button className="btn btn-primary" onClick={()=>{setGerado(true);setTab('resumo');}}>Gerar relatório</button>
@@ -1366,7 +1488,7 @@ function Relatorio() {
           <div className="tab-bar no-print">
             {['resumo','produtos','vendedores','compradores','pendencias'].map(t=>(
               <button key={t} className={`tab-btn ${tab===t?'active':''}`} onClick={()=>setTab(t)}>
-                {t==='resumo'?'📊 Resumo':t==='produtos'?'☕ Produtos':t==='vendedores'?'👤 Vendedores':t==='compradores'?'🛍 Clientes':'⏳ Pendências'}
+                {t==='resumo'?'📊 Resumo':t==='produtos'?'☕ Produtos':t==='vendedores'?'👤 Vendedores':t==='compradores'?'🛍 Clientes':t==='pendencias'?'⏳ Pendências':'🏪 Feira'}
               </button>
             ))}
           </div>
@@ -1483,6 +1605,10 @@ function Relatorio() {
             </div>
           )}
 
+          {tab==='feira'&&(
+            <RelatorioFeira feirinha={feirinha} participacoes={participacoes} feirasCadastro={feirasCadastro} produtos={produtos}/>
+          )}
+
           {tab==='pendencias'&&(
             <div className="card">
               <div className="card-title">Cobranças pendentes</div>
@@ -1527,6 +1653,7 @@ function Dashboard({ syncing, setSyncing }) {
   const { arr: vendas } = useFirestore('vendas');
   const { arr: feirinha } = useFirestore('feirinha');
   const { arr: participacoes } = useFirestore('participacoes');
+  const { arr: feirasCadastro } = useFirestore('feiras_cadastro');
   const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
   const { arr: vendedores } = useFirestore('vendedores');
@@ -1581,9 +1708,18 @@ function Dashboard({ syncing, setSyncing }) {
   const vendasFiltradas = useMemo(()=> filtroAtivo && (periodo.de||periodo.ate)
     ? vendas.filter(v=>(!periodo.de||v.data>=periodo.de)&&(!periodo.ate||v.data<=periodo.ate))
     : vendas, [vendas,periodo,filtroAtivo]);
-  const feirasFiltradas = useMemo(()=> filtroAtivo && (periodo.de||periodo.ate)
-    ? feirinha.filter(f=>(!periodo.de||f.data>=periodo.de)&&(!periodo.ate||f.data<=periodo.ate))
-    : feirinha, [feirinha,periodo,filtroAtivo]);
+  const feirasFiltradas = useMemo(()=>{
+    if(!filtroAtivo) return feirinha;
+    return feirinha.filter(f=>{
+      if(periodo.de&&f.data<periodo.de) return false;
+      if(periodo.ate&&f.data>periodo.ate) return false;
+      if(periodo.feira_id){
+        const part=participacoes.find(p=>p.id===f.participacao_id);
+        if(!part||part.feira_id!==periodo.feira_id) return false;
+      }
+      return true;
+    });
+  },[feirinha,periodo,filtroAtivo,participacoes]);
 
   const totalVendas=vendasFiltradas.reduce((a,v)=>a+v.total,0);
   const lucroDelivery=vendasFiltradas.reduce((a,v)=>a+(v.lucro||0),0);
@@ -1632,6 +1768,13 @@ function Dashboard({ syncing, setSyncing }) {
           <div className="field" style={{margin:0}}>
             <label>Até</label>
             <input type="date" value={periodo.ate} onChange={e=>setPeriodo(p=>({...p,ate:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
+          </div>
+          <div className="field" style={{margin:0}}>
+            <label>Feira</label>
+            <select value={periodo.feira_id||''} onChange={e=>setPeriodo(p=>({...p,feira_id:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}>
+              <option value="">Todas</option>
+              {feirasCadastro.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+            </select>
           </div>
           <button className="btn btn-primary btn-sm" onClick={()=>setFiltroAtivo(true)} style={{marginBottom:1}}>Filtrar</button>
           {filtroAtivo&&<button className="btn btn-ghost btn-sm" onClick={()=>{setFiltroAtivo(false);setPeriodo({de:'',ate:''});}} style={{marginBottom:1}}>Ver tudo</button>}

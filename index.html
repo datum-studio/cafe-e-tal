@@ -391,9 +391,9 @@ function Vendedores({ syncing, setSyncing }) {
   function gerarResumoVendedor(v) {
     const vendasVend = vendas.filter(vd =>
       vd.vendedor_id === v.id &&
-      (!filtroPeriodo.de || vd.data >= filtroPeriodo.de) &&
-      (!filtroPeriodo.ate || vd.data <= filtroPeriodo.ate)
-    ).sort((a,b) => a.data.localeCompare(b.data));
+      (!filtroPeriodo.de || (vd.data||'') >= filtroPeriodo.de) &&
+      (!filtroPeriodo.ate || (vd.data||'') <= filtroPeriodo.ate)
+    ).sort((a,b) => (a.data||'').localeCompare(b.data||''));
 
     if (vendasVend.length === 0) {
       return showAlert('danger', `${v.nome} não tem vendas nesse período.`);
@@ -1457,7 +1457,7 @@ function Relatorio() {
   const { arr: feirinha } = useFirestore('feirinha');
   const { arr: participacoes } = useFirestore('participacoes');
   const { arr: feirasCadastro } = useFirestore('feiras_cadastro');
-  const [filtro, setFiltro] = useState({de:primeiroDiaMes(),ate:hoje(),canal:'todos',vendedor_id:''});
+  const [filtro, setFiltro] = useState({de:primeiroDiaMes(),ate:hoje(),canal:'todos',vendedor_id:'',feira_id:''});
   const [gerado, setGerado] = useState(false);
   const [tab, setTab] = useState('resumo');
 
@@ -1574,7 +1574,7 @@ function Relatorio() {
       {resultado&&(
         <>
           <div className="tab-bar no-print">
-            {['resumo','produtos','vendedores','compradores','pendencias'].map(t=>(
+            {['resumo','feira','produtos','vendedores','compradores','pendencias'].map(t=>(
               <button key={t} className={`tab-btn ${tab===t?'active':''}`} onClick={()=>setTab(t)}>
                 {t==='resumo'?'📊 Resumo':t==='produtos'?'☕ Produtos':t==='vendedores'?'👤 Vendedores':t==='compradores'?'🛍 Clientes':t==='pendencias'?'⏳ Pendências':'🏪 Feira'}
               </button>
@@ -1793,9 +1793,14 @@ function Dashboard({ syncing, setSyncing }) {
     setTimeout(() => setRecalcInfo(null), 4000);
   }
 
-  const vendasFiltradas = useMemo(()=> filtroAtivo && (periodo.de||periodo.ate)
-    ? vendas.filter(v=>(!periodo.de||v.data>=periodo.de)&&(!periodo.ate||v.data<=periodo.ate))
-    : vendas, [vendas,periodo,filtroAtivo]);
+  const vendasFiltradas = useMemo(()=>{
+    if(!filtroAtivo) return vendas;
+    return vendas.filter(v=>{
+      if(periodo.de&&v.data<periodo.de) return false;
+      if(periodo.ate&&v.data>periodo.ate) return false;
+      return true;
+    });
+  },[vendas,periodo,filtroAtivo]);
   const feirasFiltradas = useMemo(()=>{
     if(!filtroAtivo) return feirinha;
     // Se participação selecionada, sobrepõe filtro de data

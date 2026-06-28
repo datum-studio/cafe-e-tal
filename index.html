@@ -102,11 +102,7 @@ if ('serviceWorker' in navigator) {
   .topbar { background: var(--wine); color: var(--gold); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; box-shadow: 0 2px 8px rgba(0,0,0,0.18); position: sticky; top: 0; z-index: 100; }
   .topbar-logo { font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--gold); white-space: nowrap; }
   .topbar-logo span { color: var(--gold-light); font-weight: 400; }
-  .nav { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; max-width: calc(100vw - 140px); }
-  .nav::-webkit-scrollbar { display: none; }
-  .nav-btn { background: none; border: none; color: var(--gold); padding: 8px 10px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s; white-space: nowrap; flex-shrink: 0; }
-  .nav-btn:hover { background: rgba(212,175,106,0.15); }
-  .nav-btn.active { background: var(--gold); color: var(--wine); font-weight: 700; }
+  
   .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); margin-left: 4px; display: inline-block; }
   .sync-dot.syncing { background: #fbbf24; animation: pulse 1s infinite; }
   .sync-dot.error { background: #f87171; }
@@ -182,11 +178,40 @@ if ('serviceWorker' in navigator) {
   @keyframes spin { to { transform: rotate(360deg); } }
   .scroll-x { overflow-x: auto; }
   .highlight-row td { font-weight: 700; }
+  /* Layout com sidebar */
+  .layout { display: flex; flex: 1; min-height: 0; }
+  .sidebar { width: 200px; flex-shrink: 0; background: #fff; border-right: 1px solid var(--border); padding: 1rem 0.75rem; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto; }
+  .sidebar-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent; cursor: pointer; transition: all 0.15s; background: none; width: 100%; text-align: left; }
+  .sidebar-card:hover { background: var(--cream); border-color: var(--border); }
+  .sidebar-card.active { background: #F5E6ED; border-color: #E8C5D5; }
+  .sidebar-icon { font-size: 20px; flex-shrink: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: var(--cream-dark); }
+  .sidebar-card.active .sidebar-icon { background: var(--wine); }
+  .sidebar-label { font-size: 13px; font-weight: 600; color: var(--text-muted); line-height: 1.2; }
+  .sidebar-card.active .sidebar-label { color: var(--wine); }
+  .sidebar-sub { font-size: 11px; color: var(--text-muted); opacity: 0.7; }
+  .content-area { flex: 1; padding: 1.5rem; overflow-y: auto; min-width: 0; }
+
+  @media (max-width: 640px) {
+    .sidebar { display: none; }
+    .bottom-nav { display: flex !important; }
+    .content-area { padding: 1rem; padding-bottom: 80px; }
+  }
+  .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border); z-index: 100; padding: 6px 0 env(safe-area-inset-bottom); }
+  .bottom-nav-inner { display: flex; justify-content: space-around; }
+  .bnav-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 8px; border: none; background: none; cursor: pointer; border-radius: 8px; min-width: 44px; }
+  .bnav-btn .bnav-icon { font-size: 20px; }
+  .bnav-btn .bnav-label { font-size: 9px; font-weight: 600; color: var(--text-muted); }
+  .bnav-btn.active .bnav-label { color: var(--wine); }
+  .bnav-btn.active .bnav-icon { filter: none; }
+
   @media print {
     .no-print { display: none !important; }
     body { background: white; }
     .card { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
     .topbar { display: none; }
+    .sidebar { display: none; }
+    .bottom-nav { display: none; }
+    .content-area { padding: 0; }
   }
   @media (max-width: 640px) {
     .nav-btn { padding: 8px 7px; font-size: 11px; }
@@ -1276,13 +1301,13 @@ function App() {
   },[]);
 
   const pages=[
-    {id:'dashboard',label:'📊 Painel'},
-    {id:'produtos',label:'☕ Produtos'},
-    {id:'vendedores',label:'👤 Vendedores'},
-    {id:'compradores',label:'🛍 Compradores'},
-    {id:'vendas',label:'🛒 Vendas'},
-    {id:'feirinha',label:'🏪 Feirinha'},
-    {id:'relatorio',label:'📈 Relatório'},
+    {id:'dashboard', icon:'📊', label:'Painel',      sub:'Visão geral',    short:'Painel'},
+    {id:'produtos',  icon:'☕', label:'Produtos',    sub:'Catálogo',       short:'Produtos'},
+    {id:'vendedores',icon:'👤', label:'Vendedores',  sub:'Equipe',         short:'Equipe'},
+    {id:'compradores',icon:'🛍',label:'Compradores', sub:'Clientes',       short:'Clientes'},
+    {id:'vendas',    icon:'🛒', label:'Vendas',      sub:'Delivery',       short:'Vendas'},
+    {id:'feirinha',  icon:'🏪', label:'Feirinha',    sub:'Venda direta',   short:'Feira'},
+    {id:'relatorio', icon:'📈', label:'Relatório',   sub:'Por período',    short:'Relatório'},
   ];
 
   if(!ready) return (
@@ -1296,36 +1321,51 @@ function App() {
     <div className="app">
       <div className="topbar no-print">
         <div className="topbar-logo">CAFÉ <span>&</span> TAL</div>
-        <nav className="nav">
-          {pages.map(p=>(
-            <button key={p.id} className={`nav-btn ${page===p.id?'active':''}`} onClick={()=>setPage(p.id)}>{p.label}</button>
-          ))}
-        </nav>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:8,flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
           <InstallButton/>
           <span className={`sync-dot ${syncing?'syncing':''}`} title={syncing?'Salvando...':'Sincronizado'}/>
         </div>
       </div>
-      <main className="main">
-        {page==='dashboard'&&<Dashboard/>}
-        {page==='produtos'&&<Produtos syncing={syncing} setSyncing={setSyncing}/>}
-        {page==='vendedores'&&<Vendedores syncing={syncing} setSyncing={setSyncing}/>}
-        {page==='compradores'&&<Compradores syncing={syncing} setSyncing={setSyncing}/>}
-        {page==='vendas'&&<Vendas syncing={syncing} setSyncing={setSyncing}/>}
-        {page==='feirinha'&&<Feirinha syncing={syncing} setSyncing={setSyncing}/>}
-        {page==='relatorio'&&<Relatorio/>}
-      </main>
-      <footer className="no-print" style={{background:'var(--wine)',padding:'20px 28px',fontFamily:"'Geist',system-ui,sans-serif",marginTop:'auto'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12,maxWidth:960,margin:'0 auto'}}>
-          <div>
-            <div style={{fontSize:'0.88rem',color:'rgba(255,255,255,0.95)',lineHeight:1.4}}>
-              <span style={{fontWeight:400}}>Developed by </span><span style={{fontWeight:600,color:'var(--gold)'}}>Datum Studio</span>
-            </div>
-
+      <div className="layout no-print">
+        <aside className="sidebar no-print">
+          {pages.map(p=>(
+            <button key={p.id} className={`sidebar-card ${page===p.id?'active':''}`} onClick={()=>setPage(p.id)}>
+              <span className="sidebar-icon">{p.icon}</span>
+              <div>
+                <div className="sidebar-label">{p.label}</div>
+                <div className="sidebar-sub">{p.sub}</div>
+              </div>
+            </button>
+          ))}
+        </aside>
+        <main className="content-area">
+          {page==='dashboard'&&<Dashboard/>}
+          {page==='produtos'&&<Produtos syncing={syncing} setSyncing={setSyncing}/>}
+          {page==='vendedores'&&<Vendedores syncing={syncing} setSyncing={setSyncing}/>}
+          {page==='compradores'&&<Compradores syncing={syncing} setSyncing={setSyncing}/>}
+          {page==='vendas'&&<Vendas syncing={syncing} setSyncing={setSyncing}/>}
+          {page==='feirinha'&&<Feirinha syncing={syncing} setSyncing={setSyncing}/>}
+          {page==='relatorio'&&<Relatorio/>}
+        </main>
+      </div>
+      <nav className="bottom-nav no-print">
+        <div className="bottom-nav-inner">
+          {pages.map(p=>(
+            <button key={p.id} className={`bnav-btn ${page===p.id?'active':''}`} onClick={()=>setPage(p.id)}>
+              <span className="bnav-icon">{p.icon}</span>
+              <span className="bnav-label">{p.short}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+      <footer className="no-print" style={{padding:'20px 28px',fontFamily:"'Geist',system-ui,sans-serif",borderTop:'1px solid var(--border)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+          <div style={{fontSize:'0.88rem',color:'var(--text)',lineHeight:1.4}}>
+            <span style={{fontWeight:400}}>Developed by </span><span style={{fontWeight:600}}>Datum Studio</span>
           </div>
-          <div style={{textAlign:'right',color:'rgba(255,255,255,0.72)',fontSize:'0.72rem',lineHeight:1.7}}>
-            <div style={{fontWeight:500,color:'var(--gold-light)'}}>Café & Tal · Sistema de Gestão</div>
-            <div style={{opacity:0.8}}>v1.0.0</div>
+          <div style={{textAlign:'right',color:'var(--text-muted)',fontSize:'0.72rem',lineHeight:1.7}}>
+            <div>Sistema de Gestão · Café &amp; Tal</div>
+            <div>v1.0.0</div>
             <div>© <span id="footer-ano">2026</span></div>
           </div>
         </div>

@@ -474,14 +474,29 @@ function Vendedores({ syncing, setSyncing }) {
           <tbody>
             {vendedores.length===0 && <tr><td colSpan={4}><div className="empty-state">Nenhum vendedor cadastrado</div></td></tr>}
             {vendedores.map(v => {
-              const qtd = vendas.filter(vd=>vd.vendedor_id===v.id).length;
+              const qtdTotal = vendas.filter(vd=>vd.vendedor_id===v.id).length;
+              const qtdPeriodo = vendas.filter(vd=>
+                vd.vendedor_id===v.id &&
+                (!filtroPeriodo.de||(vd.data||'')>=filtroPeriodo.de) &&
+                (!filtroPeriodo.ate||(vd.data||'')<=filtroPeriodo.ate)
+              ).length;
+              const filtroAtivo = filtroPeriodo.de||filtroPeriodo.ate;
+              const qtdExibida = filtroAtivo ? qtdPeriodo : qtdTotal;
               return (
                 <tr key={v.id}>
                   <td style={{fontWeight:600}}>{v.nome}</td>
                   <td style={{color:'var(--text-muted)'}}>{v.telefone||'—'}</td>
-                  <td><span className="badge badge-wine">{qtd} venda{qtd!==1?'s':''}</span></td>
-                  <td style={{display:'flex',gap:4}}>
-                    <button className="btn btn-ghost btn-sm" onClick={()=>gerarResumoVendedor(v)} title="Enviar resumo por WhatsApp">📲</button>
+                  <td>
+                    <span className={`badge ${qtdExibida===0&&filtroAtivo?'badge-red':'badge-wine'}`}>
+                      {qtdExibida} venda{qtdExibida!==1?'s':''}
+                    </span>
+                    {filtroAtivo&&<span style={{fontSize:10,color:'var(--text-muted)',display:'block',marginTop:2}}>no período</span>}
+                  </td>
+                  <td style={{display:'flex',gap:4,alignItems:'center'}}>
+                    {qtdExibida===0&&filtroAtivo
+                      ? <span style={{fontSize:11,color:'var(--text-muted)',fontStyle:'italic'}}>Sem vendas no período</span>
+                      : <button className="btn btn-ghost btn-sm" onClick={()=>gerarResumoVendedor(v)} title="Enviar resumo por WhatsApp">📲</button>
+                    }
                     <button className="btn btn-danger btn-sm" onClick={()=>excluir(v.id)}>✕</button>
                   </td>
                 </tr>
@@ -1409,7 +1424,38 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
           </div>
 
           <div style={{display:'flex',gap:8,marginBottom:12}}>
-            <button className="btn btn-gold" onClick={()=>window.print()}>🖨 Imprimir</button>
+            <button className="btn btn-gold" onClick={()=>{
+              const feira = feirasCadastro.find(f=>f.id===feiraId);
+              const partSel = partId ? partsDaFeira.find(p=>p.id===partId) : null;
+              const subtitulo = partSel
+                ? `${partSel.data_inicio?.split('-').reverse().join('/')}${partSel.data_fim&&partSel.data_fim!==partSel.data_inicio?' a '+partSel.data_fim.split('-').reverse().join('/'):''}` 
+                : 'Todas as participações';
+              
+              const max = resultado.itens[0]?.total||1;
+              let html = `<div class="section"><div class="section-title">Resumo da participação</div>`;
+              html += `<div class="metrics">`;
+              html += `<div class="metric"><div class="metric-label">Registros</div><div class="metric-value">${resultado.qtdRegistros}</div></div>`;
+              html += `<div class="metric"><div class="metric-label">Faturamento</div><div class="metric-value">${fmt(resultado.totalVendas)}</div></div>`;
+              if(resultado.totalInscricoes>0) html += `<div class="metric danger"><div class="metric-label">Inscrições</div><div class="metric-value">−${fmt(resultado.totalInscricoes)}</div></div>`;
+              html += `<div class="metric ${resultado.lucroLiquido>0?'success':'danger'}"><div class="metric-label">Lucro líquido</div><div class="metric-value">${fmt(resultado.lucroLiquido)}</div><div class="metric-sub">${resultado.lucroLiquido>0?'✔ Valeu a pena':'Prejuizo'}</div></div>`;
+              html += `</div></div>`;
+
+              html += `<div class="section"><div class="section-title">Itens vendidos</div>`;
+              resultado.itens.forEach((it,i)=>{
+                html += `<div class="bar-row"><div class="bar-label">${it.nome}</div><div class="bar-bg"><div class="bar-fill" style="width:${(it.total/max*100).toFixed(0)}%"></div></div><div class="bar-val">${it.qtd} un · ${fmt(it.total)}</div></div>`;
+              });
+              html += `</div>`;
+
+              if(resultado.porPart.length>1){
+                html += `<div class="section"><div class="section-title">Comparativo por participação</div><table><thead><tr><th>Período</th><th>Registros</th><th>Faturamento</th><th>Inscrição</th><th>Lucro líquido</th></tr></thead><tbody>`;
+                resultado.porPart.forEach(p=>{
+                  html += `<tr><td><strong>${p.label}</strong></td><td>${p.qtd}</td><td>${fmt(p.total)}</td><td>${p.inscricao>0?'−'+fmt(p.inscricao):'—'}</td><td><strong>${fmt(p.lucro)}</strong></td></tr>`;
+                });
+                html += `</tbody></table></div>`;
+              }
+
+              imprimirRelatorio('Relatório de Feira', `${feira?.nome||'Feira'} · ${subtitulo}`, html);
+            }}>🖨 Imprimir</button>
             <button className="btn btn-ghost" onClick={()=>{const msg=encodeURIComponent(textoWhats());window.open(`https://wa.me/?text=${msg}`,'_blank');}}>📲 WhatsApp</button>
           </div>
 
@@ -1577,7 +1623,65 @@ function Relatorio() {
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
           <button className="btn btn-primary" onClick={()=>{setGerado(true);setTab('resumo');}}>Gerar relatório</button>
-          {resultado&&<button className="btn btn-gold" onClick={()=>window.print()}>🖨 Imprimir / PDF</button>}
+          {resultado&&<button className="btn btn-gold" onClick={()=>{
+            const periodo = filtro.de && filtro.ate ? `${filtro.de.split('-').reverse().join('/')} a ${filtro.ate.split('-').reverse().join('/')}` : 'Período completo';
+            const feira = filtro.feira_id ? feirasCadastro.find(f=>f.id===filtro.feira_id)?.nome : null;
+            const subtitulo = feira ? `Feira: ${feira} · ${periodo}` : periodo;
+            
+            // Métricas
+            let html = `<div class="section">`;
+            html += `<div class="section-title">Resumo executivo</div>`;
+            html += `<div class="metrics">`;
+            html += `<div class="metric"><div class="metric-label">Faturamento total</div><div class="metric-value">${fmt(resultado.totalGeral)}</div><div class="metric-sub">${resultado.qtdDelivery+resultado.qtdFeira} vendas</div></div>`;
+            html += `<div class="metric success"><div class="metric-label">Lucro real</div><div class="metric-value">${fmt(resultado.lucroGeral)}</div><div class="metric-sub">margem ${((resultado.lucroGeral/resultado.totalGeral)*100||0).toFixed(1)}%</div></div>`;
+            html += `<div class="metric"><div class="metric-label">Delivery</div><div class="metric-value">${fmt(resultado.totalDelivery)}</div><div class="metric-sub">${resultado.qtdDelivery} pedidos</div></div>`;
+            html += `<div class="metric"><div class="metric-label">Feirinha</div><div class="metric-value">${fmt(resultado.totalFeira)}</div><div class="metric-sub">${resultado.qtdFeira} registros</div></div>`;
+            html += `<div class="metric ${resultado.pendente>0?'warning':'success'}"><div class="metric-label">A receber</div><div class="metric-value">${fmt(resultado.pendente)}</div></div>`;
+            html += `<div class="metric success"><div class="metric-label">Já recebido</div><div class="metric-value">${fmt(resultado.pago)}</div></div>`;
+            html += `</div></div>`;
+
+            // Ranking produtos
+            if(resultado.ranking.length>0){
+              html += `<div class="section"><div class="section-title">Produtos mais vendidos</div>`;
+              const max = resultado.ranking[0]?.faturamento||1;
+              resultado.ranking.slice(0,10).forEach((p,i)=>{
+                html += `<div class="bar-row"><div class="bar-label">#${i+1} ${p.nome}</div><div class="bar-bg"><div class="bar-fill" style="width:${(p.faturamento/max*100).toFixed(0)}%"></div></div><div class="bar-val">${p.qtd} un · ${fmt(p.faturamento)}</div></div>`;
+              });
+              html += `</div>`;
+            }
+
+            // Vendedores
+            if(resultado.rankingVendedores.length>0){
+              html += `<div class="section"><div class="section-title">Desempenho por vendedor</div><table><thead><tr><th>#</th><th>Vendedor</th><th>Pedidos</th><th>Faturamento</th><th>Lucro</th><th>Ticket médio</th></tr></thead><tbody>`;
+              resultado.rankingVendedores.forEach((v,i)=>{
+                html += `<tr><td>${i+1}</td><td><strong>${v.nome}</strong></td><td>${v.qtd}</td><td>${fmt(v.total)}</td><td>${fmt(v.lucro)}</td><td>${fmt(v.qtd>0?v.total/v.qtd:0)}</td></tr>`;
+              });
+              html += `</tbody></table></div>`;
+            }
+
+            // Compradores
+            if(resultado.rankingCompradores.length>0){
+              html += `<div class="section"><div class="section-title">Clientes no período</div><table><thead><tr><th>#</th><th>Cliente</th><th>Cidade</th><th>Pedidos</th><th>Total</th><th>Situação</th></tr></thead><tbody>`;
+              resultado.rankingCompradores.forEach((c,i)=>{
+                html += `<tr><td>${i+1}</td><td><strong>${c.nome}</strong></td><td>${c.cidade||'—'}</td><td>${c.qtd}</td><td>${fmt(c.total)}</td><td><span class="tag ${c.pendente>0?'tag-gold':'tag-green'}">${c.pendente>0?'Pendente':'Em dia'}</span></td></tr>`;
+              });
+              html += `</tbody></table></div>`;
+            }
+
+            // Pendências
+            if(resultado.vendasPendentes.length>0){
+              html += `<div class="section"><div class="section-title">Cobranças pendentes</div>`;
+              html += `<div class="info-box"><strong>${resultado.vendasPendentes.length} venda(s)</strong> aguardando pagamento · Total: <strong>${fmt(resultado.pendente)}</strong></div>`;
+              html += `<table><thead><tr><th>Data</th><th>Cliente</th><th>Cidade</th><th>Valor</th></tr></thead><tbody>`;
+              resultado.vendasPendentes.forEach(v=>{
+                const comp = compradores.find(c=>c.id===v.comprador_id);
+                html += `<tr><td>${v.data?.split('-').reverse().join('/')}</td><td><strong>${comp?.nome||'—'}</strong></td><td>${comp?.cidade||'—'}</td><td class="valor-pendente">${fmt(v.total)}</td></tr>`;
+              });
+              html += `</tbody></table></div>`;
+            }
+
+            imprimirRelatorio('Relatório por Período', subtitulo, html);
+          }}>🖨 Imprimir / PDF</button>}
           {resultado&&<button className="btn btn-ghost" onClick={()=>setGerado(false)}>Limpar</button>}
         </div>
       </div>
@@ -2539,7 +2643,30 @@ function Producao() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-primary" onClick={() => setGerado(true)} disabled={!filtro.cidade}>Gerar lista</button>
-          {resultado && <button className="btn btn-gold" onClick={() => window.print()}>🖨 Imprimir / PDF</button>}
+          {resultado && resultado.itens.length > 0 && <button className="btn btn-gold" onClick={() => {
+          const subtitulo = `${filtro.cidade} · ${filtro.de.split('-').reverse().join('/')} a ${filtro.ate.split('-').reverse().join('/')}`;
+          const max = resultado.itens[0]?.qtd||1;
+          let html = `<div class="section"><div class="section-title">Resumo</div>`;
+          html += `<div class="metrics">`;
+          html += `<div class="metric"><div class="metric-label">Pedidos</div><div class="metric-value">${resultado.vendas.length}</div></div>`;
+          html += `<div class="metric"><div class="metric-label">Total a faturar</div><div class="metric-value">${fmt(resultado.total)}</div></div>`;
+          html += `<div class="metric"><div class="metric-label">Itens distintos</div><div class="metric-value">${resultado.itens.length}</div></div>`;
+          html += `</div></div>`;
+
+          html += `<div class="section"><div class="section-title">Lista de produção</div>`;
+          resultado.itens.forEach((it,i)=>{
+            html += `<div class="bar-row"><div class="bar-label"><strong>#${i+1}</strong> ${it.nome}</div><div class="bar-bg"><div class="bar-fill" style="width:${(it.qtd/max*100).toFixed(0)}%"></div></div><div class="bar-val" style="font-size:16px;font-weight:700;color:#8B1A4A">${it.qtd} un</div></div>`;
+          });
+          html += `</div>`;
+
+          html += `<div class="section"><div class="section-title">Detalhamento por cliente</div><table><thead><tr><th>Cliente</th><th>Itens</th></tr></thead><tbody>`;
+          resultado.porComprador.forEach(c=>{
+            html += `<tr><td><strong>${c.nome}</strong></td><td>${c.itens.map(it=>`${it.nome} ×${it.qtd}`).join(', ')}</td></tr>`;
+          });
+          html += `</tbody></table></div>`;
+
+          imprimirRelatorio('Lista de Produção', subtitulo, html);
+        }}>🖨 Imprimir / PDF</button>}
           {resultado && resultado.itens.length > 0 && (
             <button className="btn btn-ghost" onClick={() => {
               const msg = encodeURIComponent(textoWhats());
@@ -2598,6 +2725,88 @@ function Producao() {
     </div>
   );
 }
+
+
+// ── GERADOR DE PDF PROFISSIONAL ──────────────────────────────────
+function imprimirRelatorio(titulo, subtitulo, conteudoHTML) {
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>${titulo} — Café & Tal</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; color: #1a1a2e; background: #fff; font-size: 12px; line-height: 1.5; padding: 32px 40px; }
+
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 2px solid #8B1A4A; margin-bottom: 24px; }
+  .header-left .client { font-size: 20px; font-weight: 700; color: #8B1A4A; letter-spacing: -0.5px; }
+  .header-left .report-title { font-size: 12px; color: #7A5C4A; margin-top: 3px; }
+  .header-right { text-align: right; font-size: 10px; color: #7A5C4A; line-height: 1.7; }
+  .header-right .period { font-weight: 600; color: #1a1a2e; }
+
+  .section { margin-bottom: 28px; }
+  .section-title { font-size: 10px; font-weight: 700; color: #8B1A4A; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; padding-bottom: 5px; border-bottom: 1px solid #E8D5B0; }
+
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
+  .metric { border: 1px solid #E8D5B0; border-radius: 6px; padding: 12px 14px; }
+  .metric-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #7A5C4A; margin-bottom: 3px; }
+  .metric-value { font-size: 18px; font-weight: 700; color: #8B1A4A; line-height: 1; }
+  .metric-sub { font-size: 9px; color: #7A5C4A; margin-top: 2px; }
+  .metric.success .metric-value { color: #2D6A4F; }
+  .metric.warning .metric-value { color: #8B6914; }
+  .metric.danger .metric-value { color: #9B2226; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { background: #F5EDD8; color: #2C1810; padding: 7px 10px; text-align: left; font-weight: 700; font-size: 10px; letter-spacing: 0.3px; border-bottom: 2px solid #D4AF6A; }
+  td { padding: 7px 10px; border-bottom: 1px solid #F5EDD8; color: #2C1810; }
+  tr:last-child td { border-bottom: none; }
+
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 20px; font-size: 9px; font-weight: 700; }
+  .tag-green { background: #D8F3DC; color: #2D6A4F; }
+  .tag-gold { background: #FFF3CD; color: #8B6914; }
+
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .bar-label { font-size: 11px; min-width: 150px; color: #2C1810; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-bg { flex: 1; background: #F5EDD8; border-radius: 3px; height: 9px; }
+  .bar-fill { height: 9px; border-radius: 3px; background: #8B1A4A; }
+  .bar-val { font-size: 11px; color: #2C1810; min-width: 90px; text-align: right; font-weight: 600; }
+
+  .info-box { background: #FFF3CD; border-left: 3px solid #D4AF6A; padding: 8px 12px; border-radius: 0 4px 4px 0; margin-bottom: 12px; font-size: 11px; color: #2C1810; }
+
+  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #E8D5B0; display: flex; justify-content: space-between; font-size: 9px; color: #7A5C4A; }
+  .footer strong { color: #8B1A4A; }
+
+  @media print {
+    body { padding: 20px 28px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    @page { margin: 0; size: A4; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <div class="client">Café &amp; Tal</div>
+    <div class="report-title">${titulo}${subtitulo ? ' · ' + subtitulo : ''}</div>
+  </div>
+  <div class="header-right">
+    <div class="period">${new Date().toLocaleDateString('pt-BR', {day:'2-digit',month:'long',year:'numeric'})}</div>
+    <div>${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</div>
+  </div>
+</div>
+${conteudoHTML}
+<div class="footer">
+  <div>${titulo}</div>
+  <div>Developed by <strong>Datum Studio</strong></div>
+</div>
+<script>window.onload=()=>window.print();</script>
+</body>
+</html>`);
+  w.document.close();
+}
+
 
 // ── INSTALL PWA BUTTON ───────────────────────────────────────────
 function InstallButton() {

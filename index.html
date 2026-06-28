@@ -463,6 +463,7 @@ function Vendedores({ syncing, setSyncing }) {
 function Compradores({ syncing, setSyncing }) {
   const { arr: compradores, loading } = useFirestore('compradores');
   const { arr: vendas } = useFirestore('vendas');
+  const { arr: cidades } = useFirestore('cidades');
   const [form, setForm] = useState({nome:'',telefone:'',cidade:'',endereco:''});
   const [editando, setEditando] = useState(null);
   const [alert, setAlert] = useState(null);
@@ -505,7 +506,12 @@ function Compradores({ syncing, setSyncing }) {
         <div className="form-row cols2">
           <div className="field"><label>Nome</label><input value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} placeholder="Nome completo"/></div>
           <div className="field"><label>Telefone</label><input value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))} placeholder="(99) 99999-9999"/></div>
-          <div className="field"><label>Cidade</label><input value={form.cidade} onChange={e=>setForm(f=>({...f,cidade:e.target.value}))} placeholder="Ex: Juazeiro - BA"/></div>
+          <div className="field"><label>Cidade</label>
+              <select value={form.cidade} onChange={e=>setForm(f=>({...f,cidade:e.target.value}))}>
+                <option value="">Selecionar cidade...</option>
+                {[...cidades].sort((a,b)=>a.nome.localeCompare(b.nome)).map(c=><option key={c.id} value={c.nome}>{c.nome}</option>)}
+              </select>
+            </div>
           <div className="field"><label>Endereço (opcional)</label><input value={form.endereco} onChange={e=>setForm(f=>({...f,endereco:e.target.value}))} placeholder="Rua, nº, bairro"/></div>
         </div>
         <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Cadastrar comprador</button>
@@ -516,7 +522,12 @@ function Compradores({ syncing, setSyncing }) {
           <div className="form-row cols2">
             <div className="field"><label>Nome</label><input value={editando.nome} onChange={e=>setEditando(x=>({...x,nome:e.target.value}))}/></div>
             <div className="field"><label>Telefone</label><input value={editando.telefone} onChange={e=>setEditando(x=>({...x,telefone:e.target.value}))}/></div>
-            <div className="field"><label>Cidade</label><input value={editando.cidade} onChange={e=>setEditando(x=>({...x,cidade:e.target.value}))}/></div>
+            <div className="field"><label>Cidade</label>
+              <select value={editando.cidade} onChange={e=>setEditando(x=>({...x,cidade:e.target.value}))}>
+                <option value="">Selecionar cidade...</option>
+                {[...cidades].sort((a,b)=>a.nome.localeCompare(b.nome)).map(c=><option key={c.id} value={c.nome}>{c.nome}</option>)}
+              </select>
+            </div>
             <div className="field"><label>Endereço</label><input value={editando.endereco} onChange={e=>setEditando(x=>({...x,endereco:e.target.value}))}/></div>
           </div>
           <div style={{display:'flex',gap:8}}>
@@ -1465,6 +1476,363 @@ function Dashboard() {
   );
 }
 
+
+
+// ── CIDADES ───────────────────────────────────────────────────────
+function Cidades({ syncing, setSyncing }) {
+  const { arr: cidades, loading } = useFirestore('cidades');
+  const { arr: compradores } = useFirestore('compradores');
+  const [nome, setNome] = useState('');
+  const [editando, setEditando] = useState(null);
+  const [alert, setAlert] = useState(null);
+
+  function showAlert(tipo, msg) { setAlert({tipo, msg}); setTimeout(() => setAlert(null), 2500); }
+
+  async function salvar() {
+    const nomeLimpo = nome.trim();
+    if (!nomeLimpo) return showAlert('danger', 'Informe o nome da cidade.');
+    if (cidades.some(c => c.nome.toLowerCase() === nomeLimpo.toLowerCase()))
+      return showAlert('danger', 'Cidade já cadastrada.');
+    setSyncing(true);
+    await saveDoc('cidades', uid(), { nome: nomeLimpo });
+    setNome('');
+    showAlert('success', 'Cidade cadastrada!');
+    setSyncing(false);
+  }
+
+  async function salvarEdicao() {
+    const nomeLimpo = editando.nome.trim();
+    if (!nomeLimpo) return showAlert('danger', 'Informe o nome.');
+    if (cidades.some(c => c.id !== editando.id && c.nome.toLowerCase() === nomeLimpo.toLowerCase()))
+      return showAlert('danger', 'Já existe uma cidade com esse nome.');
+    setSyncing(true);
+    await saveDoc('cidades', editando.id, { nome: nomeLimpo });
+    // Atualizar compradores que usavam o nome antigo
+    const compsParaAtualizar = compradores.filter(c => c.cidade === editando.nomeOriginal);
+    for (const c of compsParaAtualizar) {
+      await saveDoc('compradores', c.id, { ...c, cidade: nomeLimpo });
+    }
+    setEditando(null);
+    showAlert('success', `Cidade atualizada! ${compsParaAtualizar.length} comprador(es) atualizado(s).`);
+    setSyncing(false);
+  }
+
+  async function excluir(cidade) {
+    const emUso = compradores.filter(c => c.cidade === cidade.nome).length;
+    if (emUso > 0) return showAlert('danger', `Não é possível excluir: ${emUso} comprador(es) cadastrado(s) nessa cidade.`);
+    if (!confirm(`Excluir "${cidade.nome}"?`)) return;
+    setSyncing(true);
+    await deleteDocById('cidades', cidade.id);
+    setSyncing(false);
+  }
+
+  if (loading) return <div className="loading-screen"><div className="spinner"/></div>;
+
+  return (
+    <div>
+      <div className="page-title">📍 Cidades</div>
+      {alert && <div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+
+      <div className="card">
+        <div className="card-title">Nova cidade</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div className="field" style={{ flex: 1, margin: 0 }}>
+            <label>Nome da cidade</label>
+            <input
+              value={nome}
+              onChange={e => setNome(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && salvar()}
+              placeholder="Ex: Juazeiro - BA"
+            />
+          </div>
+          <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Cadastrar</button>
+        </div>
+      </div>
+
+      {editando && (
+        <div className="card" style={{ borderColor: 'var(--gold)' }}>
+          <div className="card-title">Editar cidade</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div className="field" style={{ flex: 1, margin: 0 }}>
+              <label>Nome</label>
+              <input
+                value={editando.nome}
+                onChange={e => setEditando(x => ({ ...x, nome: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && salvarEdicao()}
+              />
+            </div>
+            <button className="btn btn-gold" onClick={salvarEdicao} disabled={syncing}>Salvar</button>
+            <button className="btn btn-ghost" onClick={() => setEditando(null)}>Cancelar</button>
+          </div>
+          {compradores.filter(c => c.cidade === editando.nomeOriginal).length > 0 && (
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+              ⚠ {compradores.filter(c => c.cidade === editando.nomeOriginal).length} comprador(es) serão atualizados automaticamente.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="card">
+        {cidades.length === 0
+          ? <div className="empty-state">Nenhuma cidade cadastrada.<br/>Cadastre as cidades antes de adicionar compradores.</div>
+          : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Cidade</th>
+                  <th>Compradores</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...cidades].sort((a, b) => a.nome.localeCompare(b.nome)).map(c => {
+                  const qtdComps = compradores.filter(x => x.cidade === c.nome).length;
+                  return (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: 600 }}>{c.nome}</td>
+                      <td>
+                        {qtdComps > 0
+                          ? <span className="badge badge-wine">{qtdComps} comprador{qtdComps !== 1 ? 'es' : ''}</span>
+                          : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Nenhum</span>
+                        }
+                      </td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setEditando({ ...c, nomeOriginal: c.nome })}>✏</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => excluir(c)}>✕</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── PRODUÇÃO POR CIDADE ───────────────────────────────────────────
+function Producao() {
+  const { arr: produtos } = useFirestore('produtos');
+  const { arr: compradores } = useFirestore('compradores');
+  const { arr: vendas } = useFirestore('vendas');
+
+  const cidades = useMemo(() => {
+    const set = new Set(compradores.map(c => c.cidade).filter(Boolean));
+    return [...set].sort();
+  }, [compradores]);
+
+  const [filtro, setFiltro] = useState({ cidade: '', de: primeiroDiaMes(), ate: hoje(), status: 'todos' });
+  const [gerado, setGerado] = useState(false);
+
+  const resultado = useMemo(() => {
+    if (!gerado || !filtro.cidade) return null;
+
+    // Compradores da cidade selecionada
+    const compsDaCidade = compradores.filter(c => c.cidade === filtro.cidade);
+    const compIds = new Set(compsDaCidade.map(c => c.id));
+
+    // Vendas no período para essa cidade
+    const vendasFiltradas = vendas.filter(v => {
+      if (v.data < filtro.de || v.data > filtro.ate) return false;
+      if (!compIds.has(v.comprador_id)) return false;
+      if (filtro.status !== 'todos' && v.status !== filtro.status) return false;
+      return true;
+    });
+
+    if (vendasFiltradas.length === 0) return { itens: [], vendas: [], total: 0 };
+
+    // Somar produtos
+    const contagem = {};
+    vendasFiltradas.forEach(v => {
+      v.itens?.forEach(it => {
+        if (!it.produto_id || !it.qtd) return;
+        if (!contagem[it.produto_id]) contagem[it.produto_id] = { qtd: 0, total: 0 };
+        const p = produtos.find(x => x.id === it.produto_id);
+        const qtd = parseInt(it.qtd) || 0;
+        contagem[it.produto_id].qtd += qtd;
+        contagem[it.produto_id].total += (p?.venda || 0) * qtd;
+      });
+    });
+
+    const itens = Object.entries(contagem)
+      .map(([id, { qtd, total }]) => ({
+        id, qtd, total,
+        nome: produtos.find(p => p.id === id)?.nome || '?',
+      }))
+      .sort((a, b) => b.qtd - a.qtd);
+
+    const totalGeral = vendasFiltradas.reduce((a, v) => a + (v.total || 0), 0);
+
+    // Detalhe por comprador
+    const porComprador = compsDaCidade
+      .map(c => {
+        const vs = vendasFiltradas.filter(v => v.comprador_id === c.id);
+        if (vs.length === 0) return null;
+        const itensComp = {};
+        vs.forEach(v => v.itens?.forEach(it => {
+          if (!it.produto_id) return;
+          itensComp[it.produto_id] = (itensComp[it.produto_id] || 0) + (parseInt(it.qtd) || 0);
+        }));
+        return {
+          nome: c.nome,
+          total: vs.reduce((a, v) => a + (v.total || 0), 0),
+          status: vs.every(v => v.status === 'pago') ? 'pago' : vs.some(v => v.status === 'pendente') ? 'pendente' : 'misto',
+          itens: Object.entries(itensComp).map(([id, qtd]) => ({
+            nome: produtos.find(p => p.id === id)?.nome || '?', qtd
+          })).sort((a, b) => b.qtd - a.qtd),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.total - a.total);
+
+    return { itens, vendas: vendasFiltradas, total: totalGeral, porComprador };
+  }, [gerado, filtro, vendas, compradores, produtos]);
+
+  const maxQtd = resultado?.itens?.[0]?.qtd || 1;
+
+  function textoWhats() {
+    if (!resultado) return '';
+    let t = `📦 *LISTA DE PRODUÇÃO — ${filtro.cidade.toUpperCase()}*
+`;
+    t += `📅 ${filtro.de.split('-').reverse().join('/')} a ${filtro.ate.split('-').reverse().join('/')}
+`;
+    t += `━━━━━━━━━━━━━━━━━━━━
+`;
+    resultado.itens.forEach(it => { t += `• ${it.nome}: *${it.qtd} un*
+`; });
+    t += `━━━━━━━━━━━━━━━━━━━━
+`;
+    t += `🛒 ${resultado.vendas.length} pedido${resultado.vendas.length !== 1 ? 's' : ''} · Total ${fmt(resultado.total)}
+`;
+    t += `
+👤 *Por cliente:*
+`;
+    resultado.porComprador.forEach(c => {
+      t += `\n${c.nome} (${fmt(c.total)})\n`;
+      c.itens.forEach(it => { t += `  - ${it.nome}: ${it.qtd} un\n`; });
+    });
+    return t;
+  }
+
+  return (
+    <div>
+      <div className="page-title">📦 Lista de produção</div>
+
+      <div className="card">
+        <div className="card-title">Filtros</div>
+        <div className="form-row cols2">
+          <div className="field">
+            <label>Cidade</label>
+            <select value={filtro.cidade} onChange={e => { setFiltro(f => ({ ...f, cidade: e.target.value })); setGerado(false); }}>
+              <option value="">Selecionar cidade...</option>
+              {cidades.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Status das vendas</label>
+            <select value={filtro.status} onChange={e => setFiltro(f => ({ ...f, status: e.target.value }))}>
+              <option value="todos">Todas</option>
+              <option value="pendente">Só pendentes</option>
+              <option value="pago">Só pagas</option>
+            </select>
+          </div>
+          <div className="field"><label>De</label><input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))}/></div>
+          <div className="field"><label>Até</label><input type="date" value={filtro.ate} onChange={e => setFiltro(f => ({ ...f, ate: e.target.value }))}/></div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-primary" onClick={() => setGerado(true)} disabled={!filtro.cidade}>Gerar lista</button>
+          {resultado && <button className="btn btn-gold" onClick={() => window.print()}>🖨 Imprimir / PDF</button>}
+          {resultado && resultado.itens.length > 0 && (
+            <button className="btn btn-ghost" onClick={() => {
+              const msg = encodeURIComponent(textoWhats());
+              window.open(`https://wa.me/?text=${msg}`, '_blank');
+            }}>📲 Enviar WhatsApp</button>
+          )}
+        </div>
+      </div>
+
+      {gerado && !filtro.cidade && (
+        <div className="card"><div className="empty-state">Selecione uma cidade para gerar a lista.</div></div>
+      )}
+
+      {resultado && resultado.itens.length === 0 && (
+        <div className="card"><div className="empty-state">Nenhuma venda encontrada para <strong>{filtro.cidade}</strong> no período.</div></div>
+      )}
+
+      {resultado && resultado.itens.length > 0 && (
+        <>
+          {/* Cards de resumo */}
+          <div className="metric-grid">
+            <div className="metric">
+              <div className="metric-label">Cidade</div>
+              <div className="metric-value" style={{ fontSize: 16 }}>{filtro.cidade}</div>
+            </div>
+            <div className="metric">
+              <div className="metric-label">Pedidos no período</div>
+              <div className="metric-value">{resultado.vendas.length}</div>
+            </div>
+            <div className="metric">
+              <div className="metric-label">Itens distintos</div>
+              <div className="metric-value">{resultado.itens.length}</div>
+            </div>
+            <div className="metric">
+              <div className="metric-label">Total a faturar</div>
+              <div className="metric-value">{fmt(resultado.total)}</div>
+            </div>
+          </div>
+
+          {/* Lista de produção principal */}
+          <div className="card" style={{ borderLeft: '4px solid var(--wine)' }}>
+            <div className="card-title">O que produzir</div>
+            {resultado.itens.map((it, i) => (
+              <div key={it.id} style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 20 }}>#{i + 1}</span>
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>{it.nome}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{fmt(it.total)}</span>
+                    <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--wine)', minWidth: 60, textAlign: 'right' }}>{it.qtd} un</span>
+                  </div>
+                </div>
+                <div className="bar-bg"><div className="bar-fill" style={{ width: `${(it.qtd / maxQtd) * 100}%` }} /></div>
+              </div>
+            ))}
+          </div>
+
+          {/* Detalhe por comprador */}
+          <div className="card">
+            <div className="card-title">Detalhamento por cliente</div>
+            {resultado.porComprador.map((c, i) => (
+              <div key={i} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: i < resultado.porComprador.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ fontWeight: 700 }}>{c.nome}</div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: 'var(--wine)', fontWeight: 600 }}>{fmt(c.total)}</span>
+                    <span className={`badge ${c.status === 'pago' ? 'badge-green' : c.status === 'pendente' ? 'badge-gold' : 'badge-wine'}`}>
+                      {c.status === 'pago' ? '✅ Pago' : c.status === 'pendente' ? '⏳ Pendente' : '⚠ Misto'}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {c.itens.map((it, j) => (
+                    <span key={j} style={{ background: 'var(--cream-dark)', borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>
+                      {it.nome} <span style={{ color: 'var(--wine)' }}>×{it.qtd}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── INSTALL PWA BUTTON ───────────────────────────────────────────
 function InstallButton() {
   const [prompt, setPrompt] = useState(null);
@@ -1510,6 +1878,8 @@ function App() {
     {id:'vendas',    icon:'🛒', label:'Vendas',      sub:'Delivery',       short:'Vendas'},
     {id:'feirinha',  icon:'🏪', label:'Feirinha',    sub:'Venda direta',   short:'Feira'},
     {id:'relatorio', icon:'📈', label:'Relatório',   sub:'Por período',    short:'Relatório'},
+    {id:'producao',  icon:'📦', label:'Produção',    sub:'Por cidade',     short:'Produção'},
+    {id:'cidades',   icon:'📍', label:'Cidades',     sub:'Cadastro',       short:'Cidades'},
   ];
 
   if(!ready) return (
@@ -1548,6 +1918,8 @@ function App() {
           {page==='vendas'&&<Vendas syncing={syncing} setSyncing={setSyncing}/>}
           {page==='feirinha'&&<Feirinha syncing={syncing} setSyncing={setSyncing}/>}
           {page==='relatorio'&&<Relatorio/>}
+          {page==='producao'&&<Producao/>}
+          {page==='cidades'&&<Cidades syncing={syncing} setSyncing={setSyncing}/>}
         </main>
       </div>
       <nav className="bottom-nav no-print">

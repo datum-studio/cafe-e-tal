@@ -424,9 +424,9 @@ function Vendedores({ syncing, setSyncing }) {
         if (p) t += `  • ${p.nome} x${it.qtd}
 `;
       });
-      t += `  💰 ${fmt(vd.total)}`;
-      if (vd.status === 'pago') t += ` ✅`;
-      else t += ` ⏳`;
+      t += `  💰 Total: ${fmt(vd.total)}`;
+      if (vd.desconto > 0) t += ` (desc. ${fmt(vd.desconto)})`;
+      t += vd.status === 'pago' ? ' ✅' : ' ⏳';
       t += `
 `;
     });
@@ -814,7 +814,7 @@ function Vendas({ syncing, setSyncing }) {
                 {i===0&&<label>Produto</label>}
                 <select value={it.produto_id} onChange={e=>setItem(i,'produto_id',e.target.value)}>
                   <option value="">Selecionar...</option>
-                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome} — {fmt(p.venda)}</option>)}
+                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}
                 </select>
               </div>
               <div className="field" style={{width:70}}>
@@ -902,7 +902,7 @@ function Vendas({ syncing, setSyncing }) {
                 {i===0&&<label>Produto</label>}
                 <select value={it.produto_id} onChange={e=>setEditandoVenda(v=>({...v,itens:v.itens.map((x,idx)=>idx===i?{...x,produto_id:e.target.value}:x)}))}>
                   <option value="">Selecionar...</option>
-                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome} — {fmt(p.venda)}</option>)}
+                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}
                 </select>
               </div>
               <div className="field" style={{width:70}}>
@@ -1710,13 +1710,13 @@ function Dashboard({ syncing, setSyncing }) {
     : vendas, [vendas,periodo,filtroAtivo]);
   const feirasFiltradas = useMemo(()=>{
     if(!filtroAtivo) return feirinha;
+    // Se participação selecionada, sobrepõe filtro de data
+    if(periodo.participacao_id){
+      return feirinha.filter(f=>f.participacao_id===periodo.participacao_id);
+    }
     return feirinha.filter(f=>{
       if(periodo.de&&f.data<periodo.de) return false;
       if(periodo.ate&&f.data>periodo.ate) return false;
-      if(periodo.feira_id){
-        const part=participacoes.find(p=>p.id===f.participacao_id);
-        if(!part||part.feira_id!==periodo.feira_id) return false;
-      }
       return true;
     });
   },[feirinha,periodo,filtroAtivo,participacoes]);
@@ -1770,14 +1770,18 @@ function Dashboard({ syncing, setSyncing }) {
             <input type="date" value={periodo.ate} onChange={e=>setPeriodo(p=>({...p,ate:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
           </div>
           <div className="field" style={{margin:0}}>
-            <label>Feira</label>
-            <select value={periodo.feira_id||''} onChange={e=>setPeriodo(p=>({...p,feira_id:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}>
+            <label>Feira / Participação</label>
+            <select value={periodo.participacao_id||''} onChange={e=>setPeriodo(p=>({...p,participacao_id:e.target.value,feira_id:''}))} style={{padding:'6px 8px',fontSize:13}}>
               <option value="">Todas</option>
-              {feirasCadastro.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+              {[...participacoes].sort((a,b)=>b.data_inicio.localeCompare(a.data_inicio)).map(p=>{
+                const ini=p.data_inicio?.split('-').reverse().join('/');
+                const fim=p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:'' ;
+                return <option key={p.id} value={p.id}>{p.feira_nome} · {ini}{fim}</option>;
+              })}
             </select>
           </div>
           <button className="btn btn-primary btn-sm" onClick={()=>setFiltroAtivo(true)} style={{marginBottom:1}}>Filtrar</button>
-          {filtroAtivo&&<button className="btn btn-ghost btn-sm" onClick={()=>{setFiltroAtivo(false);setPeriodo({de:'',ate:''});}} style={{marginBottom:1}}>Ver tudo</button>}
+          {filtroAtivo&&<button className="btn btn-ghost btn-sm" onClick={()=>{setFiltroAtivo(false);setPeriodo({de:'',ate:'',participacao_id:'',feira_id:''});}} style={{marginBottom:1}}>Ver tudo</button>}
           {filtroAtivo&&<span style={{fontSize:12,color:'var(--text-muted)',alignSelf:'center'}}>
             {periodo.de&&periodo.ate ? `${periodo.de.split('-').reverse().join('/')} a ${periodo.ate.split('-').reverse().join('/')}` : 'Período filtrado'}
           </span>}

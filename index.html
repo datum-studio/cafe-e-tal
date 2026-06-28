@@ -94,6 +94,7 @@
   .form-row.cols4 { grid-template-columns: 1fr 1fr 1fr auto; }
   .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
   .field input, .field select, .field textarea { width: 100%; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 14px; color: var(--text); background: var(--cream); transition: border-color 0.15s; }
+  input[type="date"] { font-family: 'Segoe UI', system-ui, sans-serif; }
   .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--wine); background: #fff; }
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; border: none; transition: all 0.15s; cursor: pointer; }
   .btn-primary { background: var(--wine); color: #fff; }
@@ -359,10 +360,12 @@ function Produtos({ syncing, setSyncing }) {
                     <td>{estoqueDelivery[p.id]?.qtd??0}</td>
                     <td>{estoqueFeirinha[p.id]?.qtd??0}</td>
                     <td><label className="toggle"><input type="checkbox" checked={!!p.ativo} onChange={()=>toggleAtivo(p)}/><span className="toggle-slider"/></label></td>
-                    <td style={{display:'flex',gap:4}}>
-                      <button className="btn btn-ghost btn-sm" onClick={()=>setNomeEdit({id:p.id,nome:p.nome})}>✏</button>
-                      <button className="btn btn-ghost btn-sm" onClick={()=>setEstoqueEdit({id:p.id,delivery:estoqueDelivery[p.id]?.qtd??0,feirinha:estoqueFeirinha[p.id]?.qtd??0})}>Estoque</button>
-                      <button className="btn btn-danger btn-sm" onClick={()=>excluir(p.id)}>✕</button>
+                    <td>
+                      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>setNomeEdit({id:p.id,nome:p.nome})}>✏ Nome</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>setEstoqueEdit({id:p.id,delivery:estoqueDelivery[p.id]?.qtd??0,feirinha:estoqueFeirinha[p.id]?.qtd??0})}>📦 Estoque</button>
+                        <button className="btn btn-danger btn-sm" onClick={()=>excluir(p.id)}>✕</button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -485,7 +488,7 @@ function Vendedores({ syncing, setSyncing }) {
               return (
                 <tr key={v.id}>
                   <td style={{fontWeight:600}}>{v.nome}</td>
-                  <td style={{color:'var(--text-muted)'}}>{v.telefone||'—'}</td>
+                  <td style={{color:'var(--text-muted)'}}>{v.telefone||'-'}</td>
                   <td>
                     <span className={`badge ${qtdExibida===0&&filtroAtivo?'badge-red':'badge-wine'}`}>
                       {qtdExibida} venda{qtdExibida!==1?'s':''}
@@ -616,7 +619,7 @@ function Compradores({ syncing, setSyncing }) {
                 <tr key={c.id}>
                   <td style={{fontWeight:600}}>{c.nome}</td>
                   <td style={{color:'var(--text-muted)'}}>{c.cidade}</td>
-                  <td style={{color:'var(--text-muted)'}}>{c.telefone||'—'}</td>
+                  <td style={{color:'var(--text-muted)'}}>{c.telefone||'-'}</td>
                   <td>{pendente?<span className="badge badge-gold">⚠ Pendente</span>:<span className="badge badge-green">Em dia</span>}</td>
                   <td style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-sm" onClick={()=>setEditando({...c})}>✏</button><button className="btn btn-danger btn-sm" onClick={()=>excluir(c.id)}>✕</button></td>
                 </tr>
@@ -756,10 +759,10 @@ function Vendas({ syncing, setSyncing }) {
     let t=`☕ *CAFÉ & TAL*\n━━━━━━━━━━━━━━━━━━━━\n`;
     t+=`📋 *Pedido #${venda.id.slice(0,6).toUpperCase()}*\n`;
     t+=`📅 ${venda.data}\n`;
-    t+=`👤 Cliente: ${comp?.nome||'—'}\n`;
+    t+=`👤 Cliente: ${comp?.nome||'-'}\n`;
     if(comp?.cidade) t+=`📍 ${comp.cidade}\n`;
     if(comp?.endereco) t+=`🏠 ${comp.endereco}\n`;
-    t+=`🤝 Vendedor: ${vend?.nome||'—'}\n`;
+    t+=`🤝 Vendedor: ${vend?.nome||'-'}\n`;
     t+=`━━━━━━━━━━━━━━━━━━━━\n*ITENS:*\n`;
     venda.itens?.forEach(it=>{
       const p=produtos.find(x=>x.id===it.produto_id);
@@ -822,7 +825,10 @@ function Vendas({ syncing, setSyncing }) {
                 {i===0&&<label>Produto</label>}
                 <select value={it.produto_id} onChange={e=>setItem(i,'produto_id',e.target.value)}>
                   <option value="">Selecionar...</option>
-                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}
+                  {prodAtivos.map(p=>{
+                    const stk = estoqueDelivery[p.id]?.qtd??0;
+                    return <option key={p.id} value={p.id}>{p.nome}{stk>0?` (${stk} em stk)`:' ⚠ sem estoque'}</option>;
+                  })}
                 </select>
               </div>
               <div className="field" style={{width:70}}>
@@ -970,13 +976,6 @@ function Vendas({ syncing, setSyncing }) {
                 <option value="pago">Já pago</option>
               </select>
             </div>
-            <div className="field" style={{margin:0}}>
-              <label>Entrega</label>
-              <select value={editandoVenda.entregue?'sim':'nao'} onChange={e=>setEditandoVenda(v=>({...v,entregue:e.target.value==='sim'}))}>
-                <option value="nao">Não entregue</option>
-                <option value="sim">Já entregue</option>
-              </select>
-            </div>
             <button className="btn btn-primary" onClick={salvarEdicaoVenda} disabled={syncing}>Salvar alterações</button>
           </div>
         </div>
@@ -1002,8 +1001,8 @@ function Vendas({ syncing, setSyncing }) {
                   return (
                     <tr key={v.id}>
                       <td style={{color:'var(--text-muted)'}}>{v.data}</td>
-                      <td style={{fontWeight:600}}>{comp?.nome||'—'}</td>
-                      <td style={{color:'var(--text-muted)'}}>{vend?.nome||'—'}</td>
+                      <td style={{fontWeight:600}}>{comp?.nome||'-'}</td>
+                      <td style={{color:'var(--text-muted)'}}>{vend?.nome||'-'}</td>
                       <td style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</td>
                       <td>
                         <span className={`badge ${v.status==='pago'?'badge-green':'badge-gold'}`} style={{cursor:'pointer'}} onClick={()=>togglePago(v)} title="Clique para alternar">
@@ -1033,7 +1032,7 @@ function Vendas({ syncing, setSyncing }) {
               return (
                 <div key={v.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--cream-dark)',flexWrap:'wrap',gap:8}}>
                   <div>
-                    <div style={{fontWeight:700}}>{comp?.nome||'—'}</div>
+                    <div style={{fontWeight:700}}>{comp?.nome||'-'}</div>
                     <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?.cidade} • {v.data}</div>
                   </div>
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
@@ -1233,7 +1232,10 @@ function Feirinha({ syncing, setSyncing }) {
                 {i===0&&<label>Produto</label>}
                 <select value={it.produto_id} onChange={e=>autoPreco(i,e.target.value)}>
                   <option value="">Selecionar...</option>
-                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}
+                  {prodAtivos.map(p=>{
+                    const stk = estoqueDelivery[p.id]?.qtd??0;
+                    return <option key={p.id} value={p.id}>{p.nome}{stk>0?` (${stk} em stk)`:' ⚠ sem estoque'}</option>;
+                  })}
                 </select>
               </div>
               <div className="field" style={{width:70}}>
@@ -1507,7 +1509,7 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
                         <td style={{fontWeight:600}}>{p.label}</td>
                         <td>{p.qtd}</td>
                         <td style={{color:'var(--wine)',fontWeight:600}}>{fmt(p.total)}</td>
-                        <td style={{color:'var(--danger)'}}>{p.inscricao>0?`−${fmt(p.inscricao)}`:'—'}</td>
+                        <td style={{color:'var(--danger)'}}>{p.inscricao>0?`-${fmt(p.inscricao)}`:'-'}</td>
                         <td style={{color:p.lucro>0?'var(--success)':'var(--danger)',fontWeight:700}}>{fmt(p.lucro)}</td>
                       </tr>
                     ))}
@@ -1686,7 +1688,7 @@ function Relatorio() {
             if(resultado.rankingCompradores.length>0){
               html += `<div class="section"><div class="section-title">Clientes no período</div><table><thead><tr><th>#</th><th>Cliente</th><th>Cidade</th><th>Pedidos</th><th>Total</th><th>Situação</th></tr></thead><tbody>`;
               resultado.rankingCompradores.forEach((c,i)=>{
-                html += `<tr><td>${i+1}</td><td><strong>${c.nome}</strong></td><td>${c.cidade||'—'}</td><td>${c.qtd}</td><td>${fmt(c.total)}</td><td><span class="tag ${c.pendente>0?'tag-gold':'tag-green'}">${c.pendente>0?'Pendente':'Em dia'}</span></td></tr>`;
+                html += `<tr><td>${i+1}</td><td><strong>${c.nome}</strong></td><td>${c.cidade||'-'}</td><td>${c.qtd}</td><td>${fmt(c.total)}</td><td><span class="tag ${c.pendente>0?'tag-gold':'tag-green'}">${c.pendente>0?'Pendente':'Em dia'}</span></td></tr>`;
               });
               html += `</tbody></table></div>`;
             }
@@ -1698,7 +1700,7 @@ function Relatorio() {
               html += `<table><thead><tr><th>Data</th><th>Cliente</th><th>Cidade</th><th>Valor</th></tr></thead><tbody>`;
               resultado.vendasPendentes.forEach(v=>{
                 const comp = compradores.find(c=>c.id===v.comprador_id);
-                html += `<tr><td>${v.data?.split('-').reverse().join('/')}</td><td><strong>${comp?.nome||'—'}</strong></td><td>${comp?.cidade||'—'}</td><td class="valor-pendente">${fmt(v.total)}</td></tr>`;
+                html += `<tr><td>${v.data?.split('-').reverse().join('/')}</td><td><strong>${comp?.nome||'-'}</strong></td><td>${comp?.cidade||'-'}</td><td class="valor-pendente">${fmt(v.total)}</td></tr>`;
               });
               html += `</tbody></table></div>`;
             }
@@ -1855,9 +1857,9 @@ function Relatorio() {
                           return (
                             <tr key={v.id}>
                               <td style={{color:'var(--text-muted)'}}>{v.data?.split('-').reverse().join('/')}</td>
-                              <td style={{fontWeight:600}}>{comp?.nome||'—'}</td>
-                              <td style={{color:'var(--text-muted)'}}>{comp?.cidade||'—'}</td>
-                              <td style={{color:'var(--text-muted)'}}>{vend?.nome||'—'}</td>
+                              <td style={{fontWeight:600}}>{comp?.nome||'-'}</td>
+                              <td style={{color:'var(--text-muted)'}}>{comp?.cidade||'-'}</td>
+                              <td style={{color:'var(--text-muted)'}}>{vend?.nome||'-'}</td>
                               <td style={{fontWeight:700,color:'var(--warning)'}}>{fmt(v.total)}</td>
                             </tr>
                           );
@@ -2920,7 +2922,7 @@ function App() {
             <span style={{fontWeight:400}}>Developed by </span><span style={{fontWeight:600}}>Datum Studio</span>
           </div>
           <div style={{textAlign:'right',color:'var(--text-muted)',fontSize:'0.72rem',lineHeight:1.7}}>
-            <div>Sistema de Gestão · Café &amp; Tal</div>
+            <div>v1.0.0</div>
             <div>v1.0.0</div>
             <div>© <span id="footer-ano">2026</span></div>
           </div>

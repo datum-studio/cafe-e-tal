@@ -1,7 +1,7 @@
 {
-  "name": "Café & Tal — Sistema",
+  "name": "Café & Tal",
   "short_name": "Café & Tal",
-  "description": "Sistema de gestão de vendas e feirinha",
+  "description": "Gestão de vendas e feirinha",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#8B1A4A",

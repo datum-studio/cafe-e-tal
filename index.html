@@ -407,7 +407,11 @@ function Vendedores({ syncing, setSyncing }) {
 `;
     t += `👤 *${v.nome}*
 `;
-    t += `📅 ${filtroPeriodo.de.split('-').reverse().join('/')} a ${filtroPeriodo.ate.split('-').reverse().join('/')}
+    if(filtroPeriodo.de||filtroPeriodo.ate){
+      const de=filtroPeriodo.de?filtroPeriodo.de.split('-').reverse().join('/'):'início';
+      const ate=filtroPeriodo.ate?filtroPeriodo.ate.split('-').reverse().join('/'):'hoje';
+      t += `📅 ${de} a ${ate}\n`;
+    }
 `;
     t += `━━━━━━━━━━━━━━━━━━━━
 `;
@@ -1052,54 +1056,73 @@ function Feirinha({ syncing, setSyncing }) {
   const { arr: produtos } = useFirestore('produtos');
   const { arr: feirinha, loading } = useFirestore('feirinha');
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
-  const { arr: feirasCadastro } = useFirestore('feiras_cadastro');
   const { arr: participacoes } = useFirestore('participacoes');
   const [tab, setTab] = useState('nova');
-  const [form, setForm] = useState({participacao_id:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
+  const [form, setForm] = useState({itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
   const [alert, setAlert] = useState(null);
 
+  // Sessão ativa — persiste no localStorage
+  const [sessaoId, setSessaoId] = useState(() => localStorage.getItem('feirinha_sessao') || '');
+
+  const sessaoAtiva = useMemo(() =>
+    sessaoId ? participacoes.find(p => p.id === sessaoId) : null,
+    [sessaoId, participacoes]
+  );
+
   function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
+
+  function abrirSessao(partId) {
+    localStorage.setItem('feirinha_sessao', partId);
+    setSessaoId(partId);
+    showAlert('success', 'Sessão aberta! Todas as vendas serão vinculadas a esta participação.');
+  }
+
+  function encerrarSessao() {
+    if(!confirm('Encerrar sessão da feira?')) return;
+    localStorage.removeItem('feirinha_sessao');
+    setSessaoId('');
+    showAlert('success', 'Sessão encerrada.');
+  }
+
   function setItem(i,key,val){setForm(f=>({...f,itens:f.itens.map((it,idx)=>idx===i?{...it,[key]:val}:it)}));}
   function addItem(){setForm(f=>({...f,itens:[...f.itens,{produto_id:'',qtd:1,preco_unitario:''}]}));}
   function removeItem(i){setForm(f=>({...f,itens:f.itens.filter((_,idx)=>idx!==i)}));}
+
   function autoPreco(i,pid){
     const p=produtos.find(x=>x.id===pid);
     setForm(f=>({...f,itens:f.itens.map((it,idx)=>idx===i?{...it,produto_id:pid,preco_unitario:p?p.venda:''}:it)}));
   }
+
   function calcTotal(itens){return itens.reduce((a,it)=>a+((parseFloat(it.preco_unitario)||0)*(parseInt(it.qtd)||0)),0);}
-  function calcLucro(itens, inscricao){
-    const lucroBase=itens.reduce((a,it)=>{
+  function calcLucro(itens){
+    return itens.reduce((a,it)=>{
       const p=produtos.find(x=>x.id===it.produto_id);
       return a+((parseFloat(it.preco_unitario)-(p?.custo||0))*(parseInt(it.qtd)||0));
     },0);
-    return Math.max(0, lucroBase - (parseFloat(inscricao)||0));
   }
 
   async function salvar() {
-    if(!form.participacao_id) return showAlert('danger','Selecione a participação.');
+    if(!sessaoAtiva) return showAlert('danger','Abra uma sessão de feira antes de registrar vendas.');
     if(form.itens.some(it=>!it.produto_id||!it.qtd||!it.preco_unitario)) return showAlert('danger','Preencha todos os itens.');
     setSyncing(true);
     try {
       const id=uid();
-      const part = participacoes.find(p=>p.id===form.participacao_id);
       await saveDoc('feirinha',id,{
-        ...form,
-        participacao_id: form.participacao_id,
-        feira_nome: part?.feira_nome||'',
-        data: part?.data_inicio||hoje(),
-        data_fim: part?.data_fim||part?.data_inicio||hoje(),
-        local: part?.feira_nome||(part?.feira_local||''),
+        participacao_id: sessaoAtiva.id,
+        feira_nome: sessaoAtiva.feira_nome,
+        data: hoje(),
+        local: sessaoAtiva.feira_nome,
+        itens: form.itens,
         total: calcTotal(form.itens),
-        lucro: calcLucro(form.itens, 0),
+        lucro: calcLucro(form.itens),
         criado_em: new Date().toISOString(),
       });
       for(const it of form.itens){
         const atual=estoqueFeirinha[it.produto_id]?.qtd||0;
         await saveDoc('estoque_feirinha',it.produto_id,{qtd:Math.max(0,atual-(parseInt(it.qtd)||0))});
       }
-      setForm({participacao_id:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
+      setForm({itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
       showAlert('success','Venda registrada!');
-      setTab('historico');
     } catch(e){showAlert('danger','Erro ao salvar.');}
     setSyncing(false);
   }
@@ -1112,7 +1135,8 @@ function Feirinha({ syncing, setSyncing }) {
   }
 
   const prodAtivos=produtos.filter(p=>p.ativo);
-  const totalFeiras=feirinha.reduce((a,f)=>a+f.total,0);
+
+  // Métricas gerais
   const inscricoesContadas=new Set();
   const totalInscricoes=feirinha.reduce((a,f)=>{
     if(f.participacao_id&&!inscricoesContadas.has(f.participacao_id)){
@@ -1122,6 +1146,7 @@ function Feirinha({ syncing, setSyncing }) {
     }
     return a;
   },0);
+  const totalFeiras=feirinha.reduce((a,f)=>a+f.total,0);
   const lucroFeiras=Math.max(0,feirinha.reduce((a,f)=>a+(f.lucro||0),0)-totalInscricoes);
 
   if(loading) return <div className="loading-screen"><div className="spinner"/></div>;
@@ -1129,11 +1154,47 @@ function Feirinha({ syncing, setSyncing }) {
   return (
     <div>
       <div className="page-title">🏪 Feirinha</div>
+
+      {/* Banner de sessão */}
+      {sessaoAtiva ? (
+        <div className="card" style={{borderLeft:'4px solid var(--success)',background:'#F0FBF4',marginBottom:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+            <div>
+              <div style={{fontWeight:700,color:'var(--success)'}}>🟢 Sessão ativa</div>
+              <div style={{fontSize:14,fontWeight:600,marginTop:2}}>{sessaoAtiva.feira_nome}</div>
+              <div style={{fontSize:12,color:'var(--text-muted)'}}>
+                {sessaoAtiva.data_inicio?.split('-').reverse().join('/')}
+                {sessaoAtiva.data_fim&&sessaoAtiva.data_fim!==sessaoAtiva.data_inicio?` a ${sessaoAtiva.data_fim.split('-').reverse().join('/')}`:''}
+                {sessaoAtiva.inscricao>0&&` · inscrição ${fmt(sessaoAtiva.inscricao)}`}
+              </div>
+            </div>
+            <button className="btn btn-danger btn-sm" onClick={encerrarSessao}>Encerrar sessão</button>
+          </div>
+        </div>
+      ) : (
+        <div className="card" style={{borderLeft:'4px solid var(--warning)',background:'#FFFBF0',marginBottom:12}}>
+          <div style={{fontWeight:700,color:'var(--warning)',marginBottom:8}}>⚠ Nenhuma sessão ativa</div>
+          <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:10}}>Selecione uma participação para abrir a sessão do dia. Todas as vendas serão vinculadas automaticamente.</div>
+          <div className="field" style={{marginBottom:10}}>
+            <label>Selecionar participação</label>
+            <select onChange={e=>e.target.value&&abrirSessao(e.target.value)} defaultValue="">
+              <option value="">Escolher participação...</option>
+              {[...participacoes].sort((a,b)=>b.data_inicio.localeCompare(a.data_inicio)).map(p=>{
+                const ini=p.data_inicio?.split('-').reverse().join('/');
+                const fim=p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:'' ;
+                return <option key={p.id} value={p.id}>{p.feira_nome} · {ini}{fim}</option>;
+              })}
+            </select>
+          </div>
+        </div>
+      )}
+
       <div className="metric-grid" style={{marginBottom:16}}>
         <div className="metric"><div className="metric-label">Total arrecadado</div><div className="metric-value">{fmt(totalFeiras)}</div></div>
-        <div className="metric"><div className="metric-label">Lucro real</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(lucroFeiras)}</div></div>
-        <div className="metric"><div className="metric-label">Feiras realizadas</div><div className="metric-value">{feirinha.length}</div></div>
+        <div className="metric"><div className="metric-label">Lucro líquido</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(lucroFeiras)}</div></div>
+        <div className="metric"><div className="metric-label">Registros</div><div className="metric-value">{feirinha.length}</div></div>
       </div>
+
       <div className="tab-bar">
         <button className={`tab-btn ${tab==='nova'?'active':''}`} onClick={()=>setTab('nova')}>Registrar venda</button>
         <button className={`tab-btn ${tab==='historico'?'active':''}`} onClick={()=>setTab('historico')}>Histórico</button>
@@ -1143,27 +1204,7 @@ function Feirinha({ syncing, setSyncing }) {
         <div className="card">
           {alert&&<div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
           <div className="card-title">Venda na feira</div>
-          <div className="form-row">
-            <div className="field"><label>Participação na feira</label>
-              <select value={form.participacao_id} onChange={e=>setForm(f=>({...f,participacao_id:e.target.value}))}>
-                <option value="">Selecionar participação...</option>
-                {[...participacoes].sort((a,b)=>b.data_inicio.localeCompare(a.data_inicio)).map(p=>{
-                  const ini=p.data_inicio?.split('-').reverse().join('/');
-                  const fim=p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:'' ;
-                  return <option key={p.id} value={p.id}>{p.feira_nome} · {ini}{fim} · insc. {fmt(p.inscricao)}</option>;
-                })}
-              </select>
-            </div>
-          </div>
-          {(()=>{
-            const part=participacoes.find(p=>p.id===form.participacao_id);
-            return part&&part.inscricao>0?(
-              <div style={{fontSize:12,color:'var(--danger)',padding:'4px 0 8px',borderTop:'1px dashed var(--border)'}}>
-                Inscrição desta participação: <strong>{fmt(part.inscricao)}</strong> — será descontada do lucro
-              </div>
-            ):null;
-          })()}
-          <div className="separator"/>
+          {!sessaoAtiva && <div className="alert alert-danger">Abra uma sessão primeiro para registrar vendas.</div>}
           <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS VENDIDOS</div>
           {form.itens.map((it,i)=>(
             <div key={i} className="item-linha">
@@ -1189,9 +1230,9 @@ function Feirinha({ syncing, setSyncing }) {
           ))}
           <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={addItem}>+ Adicionar item</button>
           <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens))}</span></div>
-                    <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Lucro estimado (vendas)</span><span style={{color:'var(--success)',fontSize:13,fontWeight:600}}>{fmt(calcLucro(form.itens,0))}</span></div>
+          <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Lucro estimado (vendas)</span><span style={{color:'var(--success)',fontSize:13,fontWeight:600}}>{fmt(calcLucro(form.itens))}</span></div>
           <div className="separator"/>
-          <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={syncing||!sessaoAtiva}>Registrar venda</button>
         </div>
       )}
 
@@ -1199,7 +1240,6 @@ function Feirinha({ syncing, setSyncing }) {
         <div className="card">
           {feirinha.length===0&&<div className="empty-state">Nenhuma venda na feirinha registrada</div>}
           {(()=>{
-            // Agrupar por participacao_id
             const grupos={};
             feirinha.forEach(v=>{
               const key=v.participacao_id||v.local||'sem-participacao';
@@ -1221,7 +1261,7 @@ function Feirinha({ syncing, setSyncing }) {
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:8,marginBottom:8}}>
                     <div>
                       <div style={{fontWeight:700,fontSize:14}}>{titulo}</div>
-                      <div style={{fontSize:12,color:'var(--text-muted)'}}>{vs.length} venda{vs.length!==1?'s':''}</div>
+                      <div style={{fontSize:12,color:'var(--text-muted)'}}>{vs.length} registro{vs.length!==1?'s':''}</div>
                     </div>
                     <div style={{textAlign:'right'}}>
                       <div style={{fontWeight:700,color:'var(--wine)'}}>{fmt(totalVendas)}</div>
@@ -1265,29 +1305,35 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
     [participacoes, feiraId]
   );
 
+  // Resultado da participação ou feira selecionada
   const resultado = useMemo(() => {
-    if (!partId && !feiraId) return null;
-    const vendasFiltradas = feirinha.filter(v =>
-      partId ? v.participacao_id === partId : partsDaFeira.some(p => p.id === v.participacao_id)
-    );
-    if (!vendasFiltradas.length) return { itens: [], total: 0, lucro: 0, inscricao: 0 };
+    const partsAlvo = partId
+      ? participacoes.filter(p => p.id === partId)
+      : partsDaFeira;
+    if (!partsAlvo.length && !feiraId) return null;
+
+    const partIds = new Set(partsAlvo.map(p => p.id));
+    const vendasFiltradas = feirinha.filter(v => partIds.has(v.participacao_id));
 
     // Produtos
     const contagem = {};
     vendasFiltradas.forEach(v => v.itens?.forEach(it => {
-      if (!contagem[it.produto_id]) contagem[it.produto_id] = 0;
-      contagem[it.produto_id] += parseInt(it.qtd) || 0;
+      if (!contagem[it.produto_id]) contagem[it.produto_id] = { qtd: 0, total: 0 };
+      const p = produtos.find(x => x.id === it.produto_id);
+      const qtd = parseInt(it.qtd) || 0;
+      contagem[it.produto_id].qtd += qtd;
+      contagem[it.produto_id].total += (parseFloat(it.preco_unitario) || p?.venda || 0) * qtd;
     }));
     const itens = Object.entries(contagem)
-      .map(([id, qtd]) => ({ nome: produtos.find(p => p.id === id)?.nome || '?', qtd }))
+      .map(([id, {qtd, total}]) => ({ nome: produtos.find(p => p.id === id)?.nome || '?', qtd, total }))
       .sort((a,b) => b.qtd - a.qtd);
 
-    const total = vendasFiltradas.reduce((a,v) => a + v.total, 0);
+    const totalVendas = vendasFiltradas.reduce((a,v) => a + v.total, 0);
     const lucroBase = vendasFiltradas.reduce((a,v) => a + (v.lucro||0), 0);
 
-    // Inscrições (uma por participação)
+    // Inscrições deduzidas uma vez por participação
     const contadas = new Set();
-    const inscricao = vendasFiltradas.reduce((a,v) => {
+    const totalInscricoes = vendasFiltradas.reduce((a,v) => {
       if (v.participacao_id && !contadas.has(v.participacao_id)) {
         contadas.add(v.participacao_id);
         const p = participacoes.find(x => x.id === v.participacao_id);
@@ -1295,13 +1341,44 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
       }
       return a;
     }, 0);
-    const lucro = Math.max(0, lucroBase - inscricao);
+    const lucroLiquido = Math.max(0, lucroBase - totalInscricoes);
 
-    // Participações envolvidas
-    const partsEnvolvidas = [...contadas].map(id => participacoes.find(p => p.id === id)).filter(Boolean);
+    // Por participação (para comparativo)
+    const porPart = partsAlvo.map(p => {
+      const vs = feirinha.filter(v => v.participacao_id === p.id);
+      const tot = vs.reduce((a,v) => a + v.total, 0);
+      const luc = Math.max(0, vs.reduce((a,v) => a + (v.lucro||0), 0) - (p.inscricao||0));
+      const ini = p.data_inicio?.split('-').reverse().join('/');
+      const fim = p.data_fim&&p.data_fim!==p.data_inicio ? ` a ${p.data_fim.split('-').reverse().join('/')}` : '';
+      return { label: `${ini}${fim}`, total: tot, lucro: luc, inscricao: p.inscricao||0, qtd: vs.length };
+    }).filter(p => p.qtd > 0).sort((a,b) => b.total - a.total);
 
-    return { itens, total, lucro, inscricao, partsEnvolvidas, qtdVendas: vendasFiltradas.length };
+    return { itens, totalVendas, lucroBase, totalInscricoes, lucroLiquido, qtdRegistros: vendasFiltradas.length, porPart };
   }, [partId, feiraId, feirinha, participacoes, partsDaFeira, produtos]);
+
+  function textoWhats() {
+    if (!resultado) return '';
+    const feira = feirasCadastro.find(f => f.id === feiraId);
+    let t = `🏪 *RELATÓRIO DE FEIRA*
+`;
+    if (feira) t += `*${feira.nome}*
+`;
+    t += `━━━━━━━━━━━━━━━━━━━━
+`;
+    t += `📦 *O que foi vendido:*
+`;
+    resultado.itens.forEach(it => { t += `• ${it.nome}: ${it.qtd} un — ${fmt(it.total)}
+`; });
+    t += `━━━━━━━━━━━━━━━━━━━━
+`;
+    t += `💰 Faturamento: ${fmt(resultado.totalVendas)}
+`;
+    if (resultado.totalInscricoes > 0) t += `📋 Inscrição(ões): − ${fmt(resultado.totalInscricoes)}
+`;
+    t += `✅ Lucro líquido: ${fmt(resultado.lucroLiquido)}
+`;
+    return t;
+  }
 
   return (
     <div>
@@ -1319,45 +1396,66 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
             <option value="">Todas as participações</option>
             {partsDaFeira.map(p=>{
               const ini=p.data_inicio?.split('-').reverse().join('/');
-              const fim=p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:'';
-              return <option key={p.id} value={p.id}>{p.feira_nome} · {ini}{fim}</option>;
+              const fim=p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:'' ;
+              return <option key={p.id} value={p.id}>{ini}{fim}</option>;
             })}
           </select>
         </div>
       </div>
 
-      {!resultado && <div className="empty-state">Selecione uma feira ou participação acima.</div>}
-
-      {resultado && resultado.itens.length === 0 && <div className="empty-state">Nenhuma venda encontrada.</div>}
+      {!resultado && <div className="empty-state" style={{marginTop:16}}>Selecione uma feira acima para ver o relatório.</div>}
+      {resultado && resultado.itens.length === 0 && <div className="empty-state">Nenhuma venda encontrada para essa seleção.</div>}
 
       {resultado && resultado.itens.length > 0 && (
         <>
           <div className="metric-grid">
-            <div className="metric"><div className="metric-label">Vendas</div><div className="metric-value">{resultado.qtdVendas}</div></div>
-            <div className="metric"><div className="metric-label">Faturamento</div><div className="metric-value">{fmt(resultado.total)}</div></div>
-            {resultado.inscricao>0&&<div className="metric"><div className="metric-label">Inscrição(ões)</div><div className="metric-value" style={{color:'var(--danger)'}}>{fmt(resultado.inscricao)}</div></div>}
-            <div className="metric"><div className="metric-label">Lucro líquido</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(resultado.lucro)}</div><div className="metric-sub">{resultado.lucro>0?'✅ Valeu a pena':'⚠ Prejuízo'}</div></div>
+            <div className="metric"><div className="metric-label">Registros</div><div className="metric-value">{resultado.qtdRegistros}</div></div>
+            <div className="metric"><div className="metric-label">Faturamento</div><div className="metric-value">{fmt(resultado.totalVendas)}</div></div>
+            {resultado.totalInscricoes>0&&<div className="metric"><div className="metric-label">Inscrições</div><div className="metric-value" style={{color:'var(--danger)'}}>−{fmt(resultado.totalInscricoes)}</div></div>}
+            <div className="metric">
+              <div className="metric-label">Lucro líquido</div>
+              <div className="metric-value" style={{color:resultado.lucroLiquido>0?'var(--success)':'var(--danger)'}}>{fmt(resultado.lucroLiquido)}</div>
+              <div className="metric-sub">{resultado.lucroLiquido>0?'✅ Valeu a pena':'⚠ Prejuízo'}</div>
+            </div>
+          </div>
+
+          <div style={{display:'flex',gap:8,marginBottom:12}}>
+            <button className="btn btn-gold" onClick={()=>window.print()}>🖨 Imprimir</button>
+            <button className="btn btn-ghost" onClick={()=>{const msg=encodeURIComponent(textoWhats());window.open(`https://wa.me/?text=${msg}`,'_blank');}}>📲 WhatsApp</button>
           </div>
 
           <div className="card" style={{borderLeft:'4px solid var(--wine)'}}>
             <div className="card-title">Itens vendidos</div>
             {resultado.itens.map((it,i)=>(
-              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:i<resultado.itens.length-1?'1px solid var(--cream-dark)':'none'}}>
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:i<resultado.itens.length-1?'1px solid var(--cream-dark)':'none'}}>
                 <span style={{fontSize:15}}>{it.nome}</span>
-                <span style={{fontSize:22,fontWeight:700,color:'var(--wine)'}}>{it.qtd} <span style={{fontSize:13,fontWeight:400,color:'var(--text-muted)'}}>un</span></span>
+                <div style={{display:'flex',gap:16,alignItems:'center'}}>
+                  <span style={{fontSize:13,color:'var(--text-muted)'}}>{fmt(it.total)}</span>
+                  <span style={{fontSize:22,fontWeight:700,color:'var(--wine)'}}>{it.qtd}<span style={{fontSize:13,fontWeight:400,color:'var(--text-muted)'}}> un</span></span>
+                </div>
               </div>
             ))}
           </div>
 
-          {resultado.partsEnvolvidas.length > 1 && (
+          {resultado.porPart.length > 1 && (
             <div className="card">
-              <div className="card-title">Participações incluídas</div>
-              {resultado.partsEnvolvidas.map(p=>(
-                <div key={p.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',fontSize:13,borderBottom:'1px solid var(--cream-dark)'}}>
-                  <span>{p.feira_nome} · {p.data_inicio?.split('-').reverse().join('/')}{p.data_fim&&p.data_fim!==p.data_inicio?` a ${p.data_fim.split('-').reverse().join('/')}`:''}  </span>
-                  <span style={{color:'var(--danger)'}}>insc. {fmt(p.inscricao)}</span>
-                </div>
-              ))}
+              <div className="card-title">Comparativo por participação</div>
+              <div className="scroll-x">
+                <table>
+                  <thead><tr><th>Período</th><th>Registros</th><th>Faturamento</th><th>Inscrição</th><th>Lucro líquido</th></tr></thead>
+                  <tbody>
+                    {resultado.porPart.map((p,i)=>(
+                      <tr key={i}>
+                        <td style={{fontWeight:600}}>{p.label}</td>
+                        <td>{p.qtd}</td>
+                        <td style={{color:'var(--wine)',fontWeight:600}}>{fmt(p.total)}</td>
+                        <td style={{color:'var(--danger)'}}>{p.inscricao>0?`−${fmt(p.inscricao)}`:'—'}</td>
+                        <td style={{color:p.lucro>0?'var(--success)':'var(--danger)',fontWeight:700}}>{fmt(p.lucro)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>
@@ -1365,6 +1463,7 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
     </div>
   );
 }
+
 
 // ── RELATÓRIO ─────────────────────────────────────────────────────
 function Relatorio() {
@@ -1381,7 +1480,7 @@ function Relatorio() {
 
   const resultado = useMemo(() => {
     if(!gerado) return null;
-    const {de,ate,canal,vendedor_id} = filtro;
+    const {de,ate,canal,vendedor_id,feira_id} = filtro;
 
     const vf = vendas.filter(v=>{
       if(canal==='feirinha') return false;
@@ -1391,7 +1490,13 @@ function Relatorio() {
     });
     const ff = feirinha.filter(f=>{
       if(canal==='delivery') return false;
-      if(f.data<de||f.data>ate) return false;
+      if(feira_id){
+        // filtro de feira sobrepõe datas
+        const part=participacoes.find(p=>p.id===f.participacao_id);
+        if(!part||part.feira_id!==feira_id) return false;
+      } else {
+        if(f.data<de||f.data>ate) return false;
+      }
       return true;
     });
 
@@ -1444,7 +1549,7 @@ function Relatorio() {
     return {totalDelivery,lucroDelivery,totalFeira,lucroFeira,totalGeral,lucroGeral,pendente,pago,
       qtdDelivery:vf.length,qtdFeira:ff.length,ranking,rankingVendedores,rankingCompradores,timeline,
       vendasPendentes:vf.filter(v=>v.status==='pendente')};
-  },[gerado,filtro,vendas,feirinha,produtos,vendedores,compradores]);
+  },[gerado,filtro,vendas,feirinha,produtos,vendedores,compradores,participacoes]);
 
   return (
     <div>

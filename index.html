@@ -403,45 +403,28 @@ function Vendedores({ syncing, setSyncing }) {
     const pendente = vendasVend.filter(vd => vd.status === 'pendente').reduce((a,vd) => a + vd.total, 0);
     const pago = vendasVend.filter(vd => vd.status === 'pago').reduce((a,vd) => a + vd.total, 0);
 
-    let t = `☕ *CAFÉ & TAL — Suas vendas*
-`;
-    t += `👤 *${v.nome}*
-`;
-    if(filtroPeriodo.de||filtroPeriodo.ate){
-      const de=filtroPeriodo.de?filtroPeriodo.de.split('-').reverse().join('/'):'início';
-      const ate=filtroPeriodo.ate?filtroPeriodo.ate.split('-').reverse().join('/'):'hoje';
+    let t = `☕ *CAFÉ & TAL — Suas vendas*\n`;
+    t += `👤 *${v.nome}*\n`;
+    if (filtroPeriodo.de || filtroPeriodo.ate) {
+      const de = filtroPeriodo.de ? filtroPeriodo.de.split('-').reverse().join('/') : 'início';
+      const ate = filtroPeriodo.ate ? filtroPeriodo.ate.split('-').reverse().join('/') : 'hoje';
       t += `📅 ${de} a ${ate}\n`;
     }
-`;
-    t += `━━━━━━━━━━━━━━━━━━━━
-`;
+    t += `━━━━━━━━━━━━━━━━━━━━\n`;
     vendasVend.forEach(vd => {
       const comp = compradores.find(c => c.id === vd.comprador_id);
-      t += `
-📦 *${comp?.nome || '—'}*`;
+      t += `\n📦 *${comp?.nome || '—'}*`;
       if (comp?.cidade) t += ` (${comp.cidade})`;
-      t += `
-📅 ${vd.data.split('-').reverse().join('/')}
-`;
-      vd.itens?.forEach(it => {
-        const p = produtos.find(x => x.id === it.produto_id);
-        if (p) t += `  • ${p.nome} x${it.qtd}
-`;
-      });
-      t += `  💰 Total: ${fmt(vd.total)}`;
+      t += `\n📅 ${vd.data.split('-').reverse().join('/')}\n`;
+      t += `  💰 ${fmt(vd.total)}`;
       if (vd.desconto > 0) t += ` (desc. ${fmt(vd.desconto)})`;
       t += vd.status === 'pago' ? ' ✅' : ' ⏳';
-      t += `
-`;
+      t += `\n`;
     });
-    t += `━━━━━━━━━━━━━━━━━━━━
-`;
-    t += `📊 *Total: ${fmt(total)}*
-`;
-    if (pago > 0)    t += `✅ Recebido: ${fmt(pago)}
-`;
-    if (pendente > 0) t += `⏳ Pendente: ${fmt(pendente)}
-`;
+    t += `━━━━━━━━━━━━━━━━━━━━\n`;
+    t += `📊 *Total: ${fmt(total)}*\n`;
+    if (pago > 0) t += `✅ Recebido: ${fmt(pago)}\n`;
+    if (pendente > 0) t += `⏳ Pendente: ${fmt(pendente)}\n`;
 
     setResumoModal({ texto: t, vendedor: v });
   }

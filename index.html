@@ -1142,8 +1142,7 @@ function Feirinha({ syncing, setSyncing }) {
         <div className="card">
           {alert&&<div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
           <div className="card-title">Venda na feira</div>
-          <div className="form-row cols2">
-            <div className="field"><label>Data</label><input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))}/></div>
+          <div className="form-row">
             <div className="field"><label>Participação na feira</label>
               <select value={form.participacao_id} onChange={e=>setForm(f=>({...f,participacao_id:e.target.value}))}>
                 <option value="">Selecionar participação...</option>

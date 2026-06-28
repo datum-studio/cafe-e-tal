@@ -986,6 +986,7 @@ function Feirinha({ syncing, setSyncing }) {
   const { arr: produtos } = useFirestore('produtos');
   const { arr: feirinha, loading } = useFirestore('feirinha');
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
+  const { arr: feirasCadastro } = useFirestore('feiras_cadastro');
   const [tab, setTab] = useState('nova');
   const [form, setForm] = useState({data:hoje(),local:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
   const [alert, setAlert] = useState(null);
@@ -1007,7 +1008,7 @@ function Feirinha({ syncing, setSyncing }) {
   }
 
   async function salvar() {
-    if(!form.local) return showAlert('danger','Informe o local da feira.');
+    if(!form.local) return showAlert('danger','Selecione o evento/feira.');
     if(form.itens.some(it=>!it.produto_id||!it.qtd||!it.preco_unitario)) return showAlert('danger','Preencha todos os itens.');
     setSyncing(true);
     try {
@@ -1056,7 +1057,14 @@ function Feirinha({ syncing, setSyncing }) {
           <div className="card-title">Venda na feira</div>
           <div className="form-row cols2">
             <div className="field"><label>Data</label><input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))}/></div>
-            <div className="field"><label>Local</label><input value={form.local} onChange={e=>setForm(f=>({...f,local:e.target.value}))} placeholder="Ex: Feira da Orla, Juazeiro"/></div>
+            <div className="field"><label>Feira / Evento</label>
+              <select value={form.local} onChange={e=>setForm(f=>({...f,local:e.target.value}))}>
+                <option value="">Selecionar evento...</option>
+                {[...feirasCadastro].sort((a,b)=>a.nome.localeCompare(b.nome)).map(f=>(
+                  <option key={f.id} value={f.nome}>{f.nome}{f.local?' — '+f.local:''}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="separator"/>
           <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS VENDIDOS</div>
@@ -1501,8 +1509,126 @@ function Dashboard() {
 
 
 
-// ── CIDADES ───────────────────────────────────────────────────────
-function Cidades({ syncing, setSyncing }) {
+
+// ── CADASTROS (Cidades + Feiras) ─────────────────────────────────
+function Cadastros({ syncing, setSyncing }) {
+  const [aba, setAba] = useState('cidades');
+
+  return (
+    <div>
+      <div className="page-title">⚙️ Cadastros</div>
+      <div className="tab-bar">
+        <button className={`tab-btn ${aba==='cidades'?'active':''}`} onClick={()=>setAba('cidades')}>📍 Cidades</button>
+        <button className={`tab-btn ${aba==='feiras'?'active':''}`} onClick={()=>setAba('feiras')}>🏪 Feiras / Eventos</button>
+      </div>
+      {aba==='cidades' && <CidadesTab syncing={syncing} setSyncing={setSyncing}/>}
+      {aba==='feiras'  && <FeirasTab  syncing={syncing} setSyncing={setSyncing}/>}
+    </div>
+  );
+}
+
+// ── FEIRAS TAB ────────────────────────────────────────────────────
+function FeirasTab({ syncing, setSyncing }) {
+  const { arr: feiras, loading } = useFirestore('feiras_cadastro');
+  const [form, setForm] = useState({ nome: '', local: '', recorrente: false });
+  const [editando, setEditando] = useState(null);
+  const [alert, setAlert] = useState(null);
+
+  function showAlert(tipo, msg) { setAlert({tipo, msg}); setTimeout(() => setAlert(null), 2500); }
+
+  async function salvar() {
+    const nome = form.nome.trim();
+    const local = form.local.trim();
+    if (!nome) return showAlert('danger', 'Informe o nome da feira.');
+    setSyncing(true);
+    await saveDoc('feiras_cadastro', uid(), { nome, local, recorrente: form.recorrente });
+    setForm({ nome: '', local: '', recorrente: false });
+    showAlert('success', 'Feira cadastrada!');
+    setSyncing(false);
+  }
+
+  async function salvarEdicao() {
+    if (!editando.nome.trim()) return showAlert('danger', 'Informe o nome.');
+    setSyncing(true);
+    await saveDoc('feiras_cadastro', editando.id, { nome: editando.nome.trim(), local: editando.local.trim(), recorrente: editando.recorrente });
+    setEditando(null);
+    showAlert('success', 'Feira atualizada!');
+    setSyncing(false);
+  }
+
+  async function excluir(id) {
+    if (!confirm('Excluir feira?')) return;
+    setSyncing(true);
+    await deleteDocById('feiras_cadastro', id);
+    setSyncing(false);
+  }
+
+  if (loading) return <div className="loading-screen"><div className="spinner"/></div>;
+
+  return (
+    <div>
+      {alert && <div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
+      <div className="card">
+        <div className="card-title">Nova feira / evento</div>
+        <div className="form-row cols2">
+          <div className="field"><label>Nome</label><input value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} placeholder="Ex: Feira da Orla"/></div>
+          <div className="field"><label>Local / endereço</label><input value={form.local} onChange={e=>setForm(f=>({...f,local:e.target.value}))} placeholder="Ex: Orla de Juazeiro"/></div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+          <label className="toggle"><input type="checkbox" checked={form.recorrente} onChange={e=>setForm(f=>({...f,recorrente:e.target.checked}))}/><span className="toggle-slider"/></label>
+          <span style={{fontSize:13,color:'var(--text-muted)'}}>Feira recorrente (aparece sempre na lista)</span>
+        </div>
+        <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Cadastrar</button>
+      </div>
+
+      {editando && (
+        <div className="card" style={{borderColor:'var(--gold)'}}>
+          <div className="card-title">Editar feira</div>
+          <div className="form-row cols2">
+            <div className="field"><label>Nome</label><input value={editando.nome} onChange={e=>setEditando(x=>({...x,nome:e.target.value}))}/></div>
+            <div className="field"><label>Local</label><input value={editando.local} onChange={e=>setEditando(x=>({...x,local:e.target.value}))}/></div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+            <label className="toggle"><input type="checkbox" checked={editando.recorrente} onChange={e=>setEditando(x=>({...x,recorrente:e.target.checked}))}/><span className="toggle-slider"/></label>
+            <span style={{fontSize:13,color:'var(--text-muted)'}}>Recorrente</span>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-gold" onClick={salvarEdicao} disabled={syncing}>Salvar</button>
+            <button className="btn btn-ghost" onClick={()=>setEditando(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        {feiras.length === 0
+          ? <div className="empty-state">Nenhuma feira cadastrada.<br/>Cadastre os eventos para agilizar o registro de vendas.</div>
+          : (
+            <table>
+              <thead><tr><th>Nome</th><th>Local</th><th>Tipo</th><th></th></tr></thead>
+              <tbody>
+                {[...feiras].sort((a,b)=>a.nome.localeCompare(b.nome)).map(f=>(
+                  <tr key={f.id}>
+                    <td style={{fontWeight:600}}>{f.nome}</td>
+                    <td style={{color:'var(--text-muted)'}}>{f.local||'—'}</td>
+                    <td><span className={`badge ${f.recorrente?'badge-wine':'badge-gold'}`}>{f.recorrente?'Recorrente':'Pontual'}</span></td>
+                    <td style={{display:'flex',gap:4}}>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setEditando({...f})}>✏</button>
+                      <button className="btn btn-danger btn-sm" onClick={()=>excluir(f.id)}>✕</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── CIDADES TAB ───────────────────────────────────────────────────
+function CidadesTab({ syncing, setSyncing }) {
+
   const { arr: cidades, loading } = useFirestore('cidades');
   const { arr: compradores } = useFirestore('compradores');
   const [nome, setNome] = useState('');
@@ -1695,6 +1821,8 @@ function Cidades({ syncing, setSyncing }) {
       </div>
     </div>
   );
+}
+
 }
 
 // ── PRODUÇÃO POR CIDADE ───────────────────────────────────────────
@@ -1924,15 +2052,15 @@ function App() {
   },[]);
 
   const pages=[
-    {id:'dashboard', icon:'📊', label:'Painel',      sub:'Visão geral',    short:'Painel'},
-    {id:'produtos',  icon:'☕', label:'Produtos',    sub:'Catálogo',       short:'Produtos'},
-    {id:'vendedores',icon:'👤', label:'Vendedores',  sub:'Equipe',         short:'Equipe'},
-    {id:'compradores',icon:'🛍',label:'Compradores', sub:'Clientes',       short:'Clientes'},
-    {id:'vendas',    icon:'🛒', label:'Vendas',      sub:'Delivery',       short:'Vendas'},
-    {id:'feirinha',  icon:'🏪', label:'Feirinha',    sub:'Venda direta',   short:'Feira'},
-    {id:'relatorio', icon:'📈', label:'Relatório',   sub:'Por período',    short:'Relatório'},
-    {id:'producao',  icon:'📦', label:'Produção',    sub:'Por cidade',     short:'Produção'},
-    {id:'cidades',   icon:'📍', label:'Cidades',     sub:'Cadastro',       short:'Cidades'},
+    {id:'dashboard',  icon:'📊', label:'Painel',      sub:'Visão geral',   short:'Painel'},
+    {id:'vendas',     icon:'🛒', label:'Vendas',      sub:'Delivery',      short:'Vendas'},
+    {id:'feirinha',   icon:'🏪', label:'Feirinha',    sub:'Venda direta',  short:'Feira'},
+    {id:'compradores',icon:'🛍', label:'Compradores', sub:'Clientes',      short:'Clientes'},
+    {id:'producao',   icon:'📦', label:'Produção',    sub:'Por cidade',    short:'Produção'},
+    {id:'relatorio',  icon:'📈', label:'Relatório',   sub:'Por período',   short:'Relatório'},
+    {id:'produtos',   icon:'☕', label:'Produtos',    sub:'Catálogo',      short:'Produtos'},
+    {id:'vendedores', icon:'👤', label:'Vendedores',  sub:'Equipe',        short:'Equipe'},
+    {id:'cadastros',  icon:'⚙️', label:'Cadastros',   sub:'Cidades e feiras', short:'Config'},
   ];
 
   if(!ready) return (
@@ -1965,14 +2093,14 @@ function App() {
         </aside>
         <main className="content-area">
           {page==='dashboard'&&<Dashboard/>}
-          {page==='produtos'&&<Produtos syncing={syncing} setSyncing={setSyncing}/>}
-          {page==='vendedores'&&<Vendedores syncing={syncing} setSyncing={setSyncing}/>}
-          {page==='compradores'&&<Compradores syncing={syncing} setSyncing={setSyncing}/>}
           {page==='vendas'&&<Vendas syncing={syncing} setSyncing={setSyncing}/>}
           {page==='feirinha'&&<Feirinha syncing={syncing} setSyncing={setSyncing}/>}
-          {page==='relatorio'&&<Relatorio/>}
+          {page==='compradores'&&<Compradores syncing={syncing} setSyncing={setSyncing}/>}
           {page==='producao'&&<Producao/>}
-          {page==='cidades'&&<Cidades syncing={syncing} setSyncing={setSyncing}/>}
+          {page==='relatorio'&&<Relatorio/>}
+          {page==='produtos'&&<Produtos syncing={syncing} setSyncing={setSyncing}/>}
+          {page==='vendedores'&&<Vendedores syncing={syncing} setSyncing={setSyncing}/>}
+          {page==='cadastros'&&<Cadastros syncing={syncing} setSyncing={setSyncing}/>}
         </main>
       </div>
       <nav className="bottom-nav no-print">

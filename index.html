@@ -1054,7 +1054,7 @@ function Feirinha({ syncing, setSyncing }) {
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
   const { arr: feirasCadastro } = useFirestore('feiras_cadastro');
   const [tab, setTab] = useState('nova');
-  const [form, setForm] = useState({data:hoje(),local:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
+  const [form, setForm] = useState({data:hoje(),local:'',itens:[{produto_id:'',qtd:1,preco_unitario:''}],inscricao:''});
   const [alert, setAlert] = useState(null);
 
   function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
@@ -1066,11 +1066,12 @@ function Feirinha({ syncing, setSyncing }) {
     setForm(f=>({...f,itens:f.itens.map((it,idx)=>idx===i?{...it,produto_id:pid,preco_unitario:p?p.venda:''}:it)}));
   }
   function calcTotal(itens){return itens.reduce((a,it)=>a+((parseFloat(it.preco_unitario)||0)*(parseInt(it.qtd)||0)),0);}
-  function calcLucro(itens){
-    return itens.reduce((a,it)=>{
+  function calcLucro(itens, inscricao){
+    const lucroBase=itens.reduce((a,it)=>{
       const p=produtos.find(x=>x.id===it.produto_id);
       return a+((parseFloat(it.preco_unitario)-(p?.custo||0))*(parseInt(it.qtd)||0));
     },0);
+    return Math.max(0, lucroBase - (parseFloat(inscricao)||0));
   }
 
   async function salvar() {
@@ -1079,7 +1080,7 @@ function Feirinha({ syncing, setSyncing }) {
     setSyncing(true);
     try {
       const id=uid();
-      await saveDoc('feirinha',id,{...form,total:calcTotal(form.itens),lucro:calcLucro(form.itens),criado_em:new Date().toISOString()});
+      await saveDoc('feirinha',id,{...form,total:calcTotal(form.itens),lucro:calcLucro(form.itens,form.inscricao),inscricao:parseFloat(form.inscricao)||0,criado_em:new Date().toISOString()});
       for(const it of form.itens){
         const atual=estoqueFeirinha[it.produto_id]?.qtd||0;
         await saveDoc('estoque_feirinha',it.produto_id,{qtd:Math.max(0,atual-(parseInt(it.qtd)||0))});
@@ -1131,6 +1132,9 @@ function Feirinha({ syncing, setSyncing }) {
                 ))}
               </select>
             </div>
+          <div className="field"><label>Custo de inscrição (R$)</label>
+              <input type="number" step="0.01" min="0" value={form.inscricao} onChange={e=>setForm(f=>({...f,inscricao:e.target.value}))} placeholder="0,00 — deixe vazio se não houver"/>
+            </div>
           </div>
           <div className="separator"/>
           <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS VENDIDOS</div>
@@ -1158,7 +1162,10 @@ function Feirinha({ syncing, setSyncing }) {
           ))}
           <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={addItem}>+ Adicionar item</button>
           <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens))}</span></div>
-          <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Lucro estimado</span><span style={{color:'var(--success)',fontSize:13,fontWeight:600}}>{fmt(calcLucro(form.itens))}</span></div>
+                    {(parseFloat(form.inscricao)||0)>0&&(
+            <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Inscrição</span><span style={{color:'var(--danger)',fontSize:13}}>− {fmt(parseFloat(form.inscricao)||0)}</span></div>
+          )}
+          <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Lucro estimado</span><span style={{color:'var(--success)',fontSize:13,fontWeight:600}}>{fmt(calcLucro(form.itens,form.inscricao))}</span></div>
           <div className="separator"/>
           <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
         </div>
@@ -1182,7 +1189,8 @@ function Feirinha({ syncing, setSyncing }) {
                 </div>
                 <div style={{textAlign:'right'}}>
                   <div style={{fontWeight:700,color:'var(--wine)'}}>{fmt(f.total)}</div>
-                  <div style={{fontSize:12,color:'var(--success)'}}>lucro {fmt(f.lucro)}</div>
+                  {f.inscricao>0&&<div style={{fontSize:12,color:'var(--danger)'}}>inscrição − {fmt(f.inscricao)}</div>}
+                  <div style={{fontSize:12,color:'var(--success)'}}>lucro líquido {fmt(f.lucro)}</div>
                   <button className="btn btn-danger btn-sm" style={{marginTop:4}} onClick={()=>excluir(f.id)}>Excluir</button>
                 </div>
               </div>
@@ -1464,22 +1472,76 @@ function Relatorio() {
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────
-function Dashboard() {
+function Dashboard({ syncing, setSyncing }) {
   const { arr: produtos } = useFirestore('produtos');
   const { arr: vendas } = useFirestore('vendas');
   const { arr: feirinha } = useFirestore('feirinha');
   const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
   const { arr: vendedores } = useFirestore('vendedores');
+  const [recalcInfo, setRecalcInfo] = useState(null);
+  const [recalcDone, setRecalcDone] = useState(false);
+  const [periodo, setPeriodo] = useState({de:'',ate:''});
+  const [filtroAtivo, setFiltroAtivo] = useState(false);
 
-  const totalVendas=vendas.reduce((a,v)=>a+v.total,0);
-  const lucroDelivery=vendas.reduce((a,v)=>a+(v.lucro||0),0);
-  const totalFeiras=feirinha.reduce((a,f)=>a+f.total,0);
-  const lucroFeiras=feirinha.reduce((a,f)=>a+(f.lucro||0),0);
+  // Detectar vendas com lucro desatualizado (sem desconto aplicado)
+  const vendasDesatualizadas = useMemo(() => {
+    if (!produtos.length || !vendas.length) return [];
+    return vendas.filter(v => {
+      // Tem desconto mas lucro não foi recalculado com ele
+      if (v.desconto > 0 && v.lucro !== undefined) {
+        const lucroBase = (v.itens||[]).reduce((acc, it) => {
+          const p = produtos.find(x => x.id === it.produto_id);
+          return acc + (p ? (p.venda - p.custo) * (parseInt(it.qtd)||0) : 0);
+        }, 0);
+        const lucroEsperado = Math.max(0, lucroBase - v.desconto);
+        return Math.abs((v.lucro||0) - lucroEsperado) > 0.01;
+      }
+      // Não tem campo lucro salvo
+      if (v.lucro === undefined || v.lucro === null) return true;
+      return false;
+    });
+  }, [vendas, produtos]);
+
+  async function recalcularLucros() {
+    if (!vendasDesatualizadas.length) return;
+    setSyncing(true);
+    let count = 0;
+    for (const v of vendasDesatualizadas) {
+      const lucroBase = (v.itens||[]).reduce((acc, it) => {
+        const p = produtos.find(x => x.id === it.produto_id);
+        return acc + (p ? (p.venda - p.custo) * (parseInt(it.qtd)||0) : 0);
+      }, 0);
+      const desconto = v.desconto || 0;
+      const lucro = Math.max(0, lucroBase - desconto);
+      const subtotal = (v.itens||[]).reduce((acc, it) => {
+        const p = produtos.find(x => x.id === it.produto_id);
+        return acc + (p ? p.venda * (parseInt(it.qtd)||0) : 0);
+      }, 0);
+      await saveDoc('vendas', v.id, { ...v, lucro, subtotal: v.subtotal || subtotal });
+      count++;
+    }
+    setSyncing(false);
+    setRecalcDone(true);
+    setRecalcInfo(`${count} venda${count !== 1 ? 's' : ''} recalculada${count !== 1 ? 's' : ''}!`);
+    setTimeout(() => setRecalcInfo(null), 4000);
+  }
+
+  const vendasFiltradas = useMemo(()=> filtroAtivo && (periodo.de||periodo.ate)
+    ? vendas.filter(v=>(!periodo.de||v.data>=periodo.de)&&(!periodo.ate||v.data<=periodo.ate))
+    : vendas, [vendas,periodo,filtroAtivo]);
+  const feirasFiltradas = useMemo(()=> filtroAtivo && (periodo.de||periodo.ate)
+    ? feirinha.filter(f=>(!periodo.de||f.data>=periodo.de)&&(!periodo.ate||f.data<=periodo.ate))
+    : feirinha, [feirinha,periodo,filtroAtivo]);
+
+  const totalVendas=vendasFiltradas.reduce((a,v)=>a+v.total,0);
+  const lucroDelivery=vendasFiltradas.reduce((a,v)=>a+(v.lucro||0),0);
+  const totalFeiras=feirasFiltradas.reduce((a,f)=>a+f.total,0);
+  const lucroFeiras=feirasFiltradas.reduce((a,f)=>a+(f.lucro||0),0);
   const totalGeral=totalVendas+totalFeiras;
   const totalLucro=lucroDelivery+lucroFeiras;
-  const pendentes=vendas.filter(v=>v.status==='pendente').reduce((a,v)=>a+v.total,0);
-  const pendentesQtd=vendas.filter(v=>v.status==='pendente').length;
+  const pendentes=vendasFiltradas.filter(v=>v.status==='pendente').reduce((a,v)=>a+v.total,0);
+  const pendentesQtd=vendasFiltradas.filter(v=>v.status==='pendente').length;
 
   const rankVendedores=vendedores.map(v=>({
     nome:v.nome,
@@ -1489,8 +1551,8 @@ function Dashboard() {
 
   const prodMaisVendido=(()=>{
     const c={};
-    vendas.forEach(v=>v.itens?.forEach(it=>{c[it.produto_id]=(c[it.produto_id]||0)+(parseInt(it.qtd)||0);}));
-    feirinha.forEach(f=>f.itens?.forEach(it=>{c[it.produto_id]=(c[it.produto_id]||0)+(parseInt(it.qtd)||0);}));
+    vendasFiltradas.forEach(v=>v.itens?.forEach(it=>{c[it.produto_id]=(c[it.produto_id]||0)+(parseInt(it.qtd)||0);}));
+    feirasFiltradas.forEach(f=>f.itens?.forEach(it=>{c[it.produto_id]=(c[it.produto_id]||0)+(parseInt(it.qtd)||0);}));
     const max=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];
     if(!max) return null;
     const p=produtos.find(x=>x.id===max[0]);
@@ -1500,6 +1562,43 @@ function Dashboard() {
   return (
     <div>
       <div className="page-title">📊 Painel geral</div>
+      <div className="card" style={{marginBottom:12,padding:'0.75rem 1.25rem'}}>
+        <div style={{display:'flex',alignItems:'flex-end',gap:8,flexWrap:'wrap'}}>
+          <div className="field" style={{margin:0}}>
+            <label>De</label>
+            <input type="date" value={periodo.de} onChange={e=>setPeriodo(p=>({...p,de:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
+          </div>
+          <div className="field" style={{margin:0}}>
+            <label>Até</label>
+            <input type="date" value={periodo.ate} onChange={e=>setPeriodo(p=>({...p,ate:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={()=>setFiltroAtivo(true)} style={{marginBottom:1}}>Filtrar</button>
+          {filtroAtivo&&<button className="btn btn-ghost btn-sm" onClick={()=>{setFiltroAtivo(false);setPeriodo({de:'',ate:''});}} style={{marginBottom:1}}>Ver tudo</button>}
+          {filtroAtivo&&<span style={{fontSize:12,color:'var(--text-muted)',alignSelf:'center'}}>
+            {periodo.de&&periodo.ate ? `${periodo.de.split('-').reverse().join('/')} a ${periodo.ate.split('-').reverse().join('/')}` : 'Período filtrado'}
+          </span>}
+        </div>
+      </div>
+
+      {vendasDesatualizadas.length > 0 && !recalcDone && (
+        <div className="card" style={{borderLeft:'4px solid var(--warning)',background:'#FFFBF0',marginBottom:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+            <div>
+              <div style={{fontWeight:700,color:'var(--warning)',marginBottom:2}}>⚠ Lucro desatualizado</div>
+              <div style={{fontSize:13,color:'var(--text-muted)'}}>
+                {vendasDesatualizadas.length} venda{vendasDesatualizadas.length!==1?'s':''} com lucro calculado sem desconto aplicado.
+              </div>
+            </div>
+            <button className="btn btn-gold" onClick={recalcularLucros} disabled={syncing}>
+              {syncing ? 'Recalculando...' : 'Recalcular agora'}
+            </button>
+          </div>
+        </div>
+      )}
+      {recalcInfo && (
+        <div className="alert alert-success" style={{marginBottom:12}}>✅ {recalcInfo}</div>
+      )}
+
       <div className="metric-grid">
         <div className="metric"><div className="metric-label">Faturamento total</div><div className="metric-value">{fmt(totalGeral)}</div><div className="metric-sub">delivery + feirinha</div></div>
         <div className="metric"><div className="metric-label">Lucro real</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(totalLucro)}</div><div className="metric-sub">descontado custo</div></div>
@@ -2166,7 +2265,7 @@ function App() {
           ))}
         </aside>
         <main className="content-area">
-          {page==='dashboard'&&<Dashboard/>}
+          {page==='dashboard'&&<Dashboard syncing={syncing} setSyncing={setSyncing}/>}
           {page==='vendas'&&<Vendas syncing={syncing} setSyncing={setSyncing}/>}
           {page==='feirinha'&&<Feirinha syncing={syncing} setSyncing={setSyncing}/>}
           {page==='compradores'&&<Compradores syncing={syncing} setSyncing={setSyncing}/>}

@@ -2722,83 +2722,65 @@ function Producao() {
 // ── GERADOR DE PDF PROFISSIONAL ──────────────────────────────────
 function imprimirRelatorio(titulo, subtitulo, conteudoHTML) {
   const w = window.open('', '_blank');
-  w.document.write(`<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>${titulo} — Café & Tal</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Inter', system-ui, sans-serif; color: #1a1a2e; background: #fff; font-size: 12px; line-height: 1.5; padding: 32px 40px; }
+  const dataAtual = new Date().toLocaleDateString('pt-BR', {day:'2-digit',month:'long',year:'numeric'});
+  const horaAtual = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+  const cabecalho = titulo + (subtitulo ? ' · ' + subtitulo : '');
 
-  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 2px solid #8B1A4A; margin-bottom: 24px; }
-  .header-left .client { font-size: 20px; font-weight: 700; color: #8B1A4A; letter-spacing: -0.5px; }
-  .header-left .report-title { font-size: 12px; color: #7A5C4A; margin-top: 3px; }
-  .header-right { text-align: right; font-size: 10px; color: #7A5C4A; line-height: 1.7; }
-  .header-right .period { font-weight: 600; color: #1a1a2e; }
+  const estilos = `
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; color: #1a1a2e; background: #fff; font-size: 12px; line-height: 1.5; padding: 32px 40px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 2px solid #8B1A4A; margin-bottom: 24px; }
+    .header-left .client { font-size: 20px; font-weight: 700; color: #8B1A4A; letter-spacing: -0.5px; }
+    .header-left .report-title { font-size: 12px; color: #7A5C4A; margin-top: 3px; }
+    .header-right { text-align: right; font-size: 10px; color: #7A5C4A; line-height: 1.7; }
+    .header-right .period { font-weight: 600; color: #1a1a2e; }
+    .section { margin-bottom: 28px; }
+    .section-title { font-size: 10px; font-weight: 700; color: #8B1A4A; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; padding-bottom: 5px; border-bottom: 1px solid #E8D5B0; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
+    .metric { border: 1px solid #E8D5B0; border-radius: 6px; padding: 12px 14px; }
+    .metric-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #7A5C4A; margin-bottom: 3px; }
+    .metric-value { font-size: 18px; font-weight: 700; color: #8B1A4A; line-height: 1; }
+    .metric-sub { font-size: 9px; color: #7A5C4A; margin-top: 2px; }
+    .metric.success .metric-value { color: #2D6A4F; }
+    .metric.warning .metric-value { color: #8B6914; }
+    .metric.danger .metric-value { color: #9B2226; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { background: #F5EDD8; color: #2C1810; padding: 7px 10px; text-align: left; font-weight: 700; font-size: 10px; letter-spacing: 0.3px; border-bottom: 2px solid #D4AF6A; }
+    td { padding: 7px 10px; border-bottom: 1px solid #F5EDD8; color: #2C1810; }
+    tr:last-child td { border-bottom: none; }
+    .tag { display: inline-block; padding: 2px 7px; border-radius: 20px; font-size: 9px; font-weight: 700; }
+    .tag-green { background: #D8F3DC; color: #2D6A4F; }
+    .tag-gold { background: #FFF3CD; color: #8B6914; }
+    .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+    .bar-label { font-size: 11px; min-width: 150px; color: #2C1810; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bar-bg { flex: 1; background: #F5EDD8; border-radius: 3px; height: 9px; }
+    .bar-fill { height: 9px; border-radius: 3px; background: #8B1A4A; }
+    .bar-val { font-size: 11px; color: #2C1810; min-width: 90px; text-align: right; font-weight: 600; }
+    .info-box { background: #FFF3CD; border-left: 3px solid #D4AF6A; padding: 8px 12px; border-radius: 0 4px 4px 0; margin-bottom: 12px; font-size: 11px; color: #2C1810; }
+    .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #E8D5B0; display: flex; justify-content: space-between; font-size: 9px; color: #7A5C4A; }
+    .footer strong { color: #8B1A4A; }
+    @media print {
+      body { padding: 20px 28px; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @page { margin: 0; size: A4; }
+    }
+  `;
 
-  .section { margin-bottom: 28px; }
-  .section-title { font-size: 10px; font-weight: 700; color: #8B1A4A; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; padding-bottom: 5px; border-bottom: 1px solid #E8D5B0; }
+  const htmlContent = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + titulo + ' — Café & Tal</title>'
+    + '<style>' + estilos + '</style></head><body>'
+    + '<div class="header">'
+    + '<div class="header-left"><div class="client">Café &amp; Tal</div><div class="report-title">' + cabecalho + '</div></div>'
+    + '<div class="header-right"><div class="period">' + dataAtual + '</div><div>' + horaAtual + '</div></div>'
+    + '</div>'
+    + conteudoHTML
+    + '<div class="footer"><div>' + titulo + '</div><div>Developed by <strong>Datum Studio</strong></div></div>'
+    + '<script>window.onload=function(){window.print();}<\/script>'
+    + '</body></html>';
 
-  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
-  .metric { border: 1px solid #E8D5B0; border-radius: 6px; padding: 12px 14px; }
-  .metric-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #7A5C4A; margin-bottom: 3px; }
-  .metric-value { font-size: 18px; font-weight: 700; color: #8B1A4A; line-height: 1; }
-  .metric-sub { font-size: 9px; color: #7A5C4A; margin-top: 2px; }
-  .metric.success .metric-value { color: #2D6A4F; }
-  .metric.warning .metric-value { color: #8B6914; }
-  .metric.danger .metric-value { color: #9B2226; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  th { background: #F5EDD8; color: #2C1810; padding: 7px 10px; text-align: left; font-weight: 700; font-size: 10px; letter-spacing: 0.3px; border-bottom: 2px solid #D4AF6A; }
-  td { padding: 7px 10px; border-bottom: 1px solid #F5EDD8; color: #2C1810; }
-  tr:last-child td { border-bottom: none; }
-
-  .tag { display: inline-block; padding: 2px 7px; border-radius: 20px; font-size: 9px; font-weight: 700; }
-  .tag-green { background: #D8F3DC; color: #2D6A4F; }
-  .tag-gold { background: #FFF3CD; color: #8B6914; }
-
-  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
-  .bar-label { font-size: 11px; min-width: 150px; color: #2C1810; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bar-bg { flex: 1; background: #F5EDD8; border-radius: 3px; height: 9px; }
-  .bar-fill { height: 9px; border-radius: 3px; background: #8B1A4A; }
-  .bar-val { font-size: 11px; color: #2C1810; min-width: 90px; text-align: right; font-weight: 600; }
-
-  .info-box { background: #FFF3CD; border-left: 3px solid #D4AF6A; padding: 8px 12px; border-radius: 0 4px 4px 0; margin-bottom: 12px; font-size: 11px; color: #2C1810; }
-
-  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #E8D5B0; display: flex; justify-content: space-between; font-size: 9px; color: #7A5C4A; }
-  .footer strong { color: #8B1A4A; }
-
-  @media print {
-    body { padding: 20px 28px; }
-    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    @page { margin: 0; size: A4; }
-  }
-</style>
-</head>
-<body>
-<div class="header">
-  <div class="header-left">
-    <div class="client">Café &amp; Tal</div>
-    <div class="report-title">${titulo}${subtitulo ? ' · ' + subtitulo : ''}</div>
-  </div>
-  <div class="header-right">
-    <div class="period">${new Date().toLocaleDateString('pt-BR', {day:'2-digit',month:'long',year:'numeric'})}</div>
-    <div>${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</div>
-  </div>
-</div>
-${conteudoHTML}
-<div class="footer">
-  <div>${titulo}</div>
-  <div>Developed by <strong>Datum Studio</strong></div>
-</div>
-<script>window.onload=()=>window.print();</script>
-</body>
-</html>`);
+  w.document.write(htmlContent);
   w.document.close();
 }
-
 
 // ── INSTALL PWA BUTTON ───────────────────────────────────────────
 function InstallButton() {

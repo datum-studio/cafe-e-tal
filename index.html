@@ -851,6 +851,17 @@ function Vendas({ syncing, setSyncing }) {
           <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={()=>setEditandoVenda(v=>({...v,itens:[...v.itens,{produto_id:'',qtd:1}]}))}>+ Adicionar item</button>
           <div className="separator"/>
           <div className="total-row"><span style={{color:'var(--text-muted)'}}>Subtotal</span><span>{fmt(calcSubtotal(editandoVenda.itens))}</span></div>
+          {(()=>{
+            const custoTotal = editandoVenda.itens.reduce((acc,it)=>{ const p=produtos.find(x=>x.id===it.produto_id); return acc+(p?p.custo*(parseInt(it.qtd)||0):0); },0);
+            const lucroBase = calcSubtotal(editandoVenda.itens) - custoTotal;
+            return custoTotal>0 ? (
+              <div style={{display:'flex',gap:16,padding:'6px 0',fontSize:12,color:'var(--text-muted)',borderBottom:'1px dashed var(--border)'}}>
+                <span>Custo total: <strong style={{color:'var(--danger)'}}>{fmt(custoTotal)}</strong></span>
+                <span>Lucro base: <strong style={{color:'var(--success)'}}>{fmt(lucroBase)}</strong></span>
+                <span style={{opacity:0.7}}>← limite do desconto</span>
+              </div>
+            ) : null;
+          })()}
           <div style={{display:'flex',gap:8,alignItems:'flex-end',margin:'6px 0'}}>
             <div className="field" style={{margin:0,width:140}}>
               <label>Desconto</label>

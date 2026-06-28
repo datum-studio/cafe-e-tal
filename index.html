@@ -2594,21 +2594,13 @@ function Producao() {
 
   function textoWhats() {
     if (!resultado) return '';
-    let t = `📦 *LISTA DE PRODUÇÃO — ${filtro.cidade.toUpperCase()}*
-`;
-    t += `📅 ${filtro.de.split('-').reverse().join('/')} a ${filtro.ate.split('-').reverse().join('/')}
-`;
-    t += `━━━━━━━━━━━━━━━━━━━━
-`;
-    resultado.itens.forEach(it => { t += `• ${it.nome}: *${it.qtd} un*
-`; });
-    t += `━━━━━━━━━━━━━━━━━━━━
-`;
-    t += `🛒 ${resultado.vendas.length} pedido${resultado.vendas.length !== 1 ? 's' : ''} · Total ${fmt(resultado.total)}
-`;
-    t += `
-👤 *Por cliente:*
-`;
+    let t = `📦 *LISTA DE PRODUÇÃO — ${filtro.cidade.toUpperCase()}*\n`;
+    t += `📅 ${filtro.de.split('-').reverse().join('/')} a ${filtro.ate.split('-').reverse().join('/')}\n`;
+    t += `━━━━━━━━━━━━━━━━━━━━\n`;
+    resultado.itens.forEach(it => { t += `• ${it.nome}: *${it.qtd} un*\n`; });
+    t += `━━━━━━━━━━━━━━━━━━━━\n`;
+    t += `🛒 ${resultado.vendas.length} pedido${resultado.vendas.length !== 1 ? 's' : ''} · Total ${fmt(resultado.total)}\n`;
+    t += `\n👤 *Por cliente:*\n`;
     resultado.porComprador.forEach(c => {
       t += `\n${c.nome} (${fmt(c.total)})\n`;
       c.itens.forEach(it => { t += `  - ${it.nome}: ${it.qtd} un\n`; });

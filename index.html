@@ -679,7 +679,7 @@ function Vendas({ syncing, setSyncing }) {
     try {
       const id = uid();
       const descValor=calcDesconto(form.itens,form.desconto_tipo,form.desconto_valor);
-      const venda = {...form, id, subtotal:calcSubtotal(form.itens), desconto:descValor, total:calcTotal(form.itens,form.desconto_tipo,form.desconto_valor), lucro:calcLucro(form.itens,form.desconto_tipo,form.desconto_valor), criado_em:new Date().toISOString()};
+      const venda = {...form, id, subtotal:calcSubtotal(form.itens), desconto:descValor, total:calcTotal(form.itens,form.desconto_tipo,form.desconto_valor), lucro:calcLucro(form.itens,form.desconto_tipo,form.desconto_valor), entregue:form.entregue||false, criado_em:new Date().toISOString()};
       await saveDoc('vendas', id, venda);
       // baixa estoque delivery
       for(const it of form.itens){
@@ -696,6 +696,12 @@ function Vendas({ syncing, setSyncing }) {
   async function togglePago(venda) {
     setSyncing(true);
     await saveDoc('vendas', venda.id, {...venda, status:venda.status==='pago'?'pendente':'pago'});
+    setSyncing(false);
+  }
+
+  async function toggleEntregue(venda) {
+    setSyncing(true);
+    await saveDoc('vendas', venda.id, {...venda, entregue:!venda.entregue});
     setSyncing(false);
   }
 
@@ -869,6 +875,13 @@ function Vendas({ syncing, setSyncing }) {
                 <option value="pago">Já pago</option>
               </select>
             </div>
+            <div className="field" style={{margin:0}}>
+              <label>Entrega</label>
+              <select value={form.entregue?'sim':'nao'} onChange={e=>setForm(f=>({...f,entregue:e.target.value==='sim'}))}>
+                <option value="nao">Não entregue</option>
+                <option value="sim">Já entregue</option>
+              </select>
+            </div>
             <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
           </div>
         </div>
@@ -957,6 +970,13 @@ function Vendas({ syncing, setSyncing }) {
                 <option value="pago">Já pago</option>
               </select>
             </div>
+            <div className="field" style={{margin:0}}>
+              <label>Entrega</label>
+              <select value={editandoVenda.entregue?'sim':'nao'} onChange={e=>setEditandoVenda(v=>({...v,entregue:e.target.value==='sim'}))}>
+                <option value="nao">Não entregue</option>
+                <option value="sim">Já entregue</option>
+              </select>
+            </div>
             <button className="btn btn-primary" onClick={salvarEdicaoVenda} disabled={syncing}>Salvar alterações</button>
           </div>
         </div>
@@ -973,7 +993,7 @@ function Vendas({ syncing, setSyncing }) {
           </div>
           <div className="scroll-x">
             <table>
-              <thead><tr><th>Data</th><th>Comprador</th><th>Vendedor</th><th>Total</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th>Data</th><th>Comprador</th><th>Vendedor</th><th>Total</th><th>Pagamento</th><th>Entrega</th><th></th></tr></thead>
               <tbody>
                 {vendasFiltradas.length===0&&<tr><td colSpan={6}><div className="empty-state">Nenhuma venda encontrada</div></td></tr>}
                 {[...vendasFiltradas].sort((a,b)=>b.data?.localeCompare(a.data)).map(v=>{
@@ -1018,6 +1038,9 @@ function Vendas({ syncing, setSyncing }) {
                   </div>
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
                     <span style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</span>
+                    <span className={`badge ${v.entregue?'badge-green':'badge-red'}`} style={{cursor:'pointer'}} onClick={()=>toggleEntregue(v)} title="Alternar entrega">
+                      {v.entregue?'📦 Entregue':'🚚 Não entregue'}
+                    </span>
                     <button className="btn btn-gold btn-sm" onClick={()=>gerarNota(v)}>📋 Nota</button>
                     <button className="btn btn-ghost btn-sm" onClick={()=>togglePago(v)}>✅ Marcar pago</button>
                   </div>

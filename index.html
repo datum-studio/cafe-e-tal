@@ -1469,19 +1469,27 @@ function Relatorio() {
   const resultado = useMemo(() => {
     if(!gerado) return null;
     const {de,ate,canal,vendedor_id,feira_id} = filtro;
+    // Se feira selecionada, força canal feirinha (não faz sentido mostrar delivery junto)
+    const canalEfetivo = feira_id ? 'feirinha' : canal;
 
     const vf = vendas.filter(v=>{
-      if(canal==='feirinha') return false;
+      if(canalEfetivo==='feirinha') return false;
       if(v.data<de||v.data>ate) return false;
       if(vendedor_id&&v.vendedor_id!==vendedor_id) return false;
       return true;
     });
     const ff = feirinha.filter(f=>{
-      if(canal==='delivery') return false;
+      if(canalEfetivo==='delivery') return false;
       if(feira_id){
-        // filtro de feira sobrepõe datas
-        const part=participacoes.find(p=>p.id===f.participacao_id);
-        if(!part||part.feira_id!==feira_id) return false;
+        // filtro de feira sobrepõe datas — busca por participacao_id ou feira_nome (legado)
+        const part = participacoes.find(p=>p.id===f.participacao_id);
+        if(part) {
+          if(part.feira_id !== feira_id) return false;
+        } else {
+          // fallback legado: compara feira_nome
+          const feiraObj = feirasCadastro.find(x=>x.id===feira_id);
+          if(!feiraObj || f.feira_nome !== feiraObj.nome) return false;
+        }
       } else {
         if(f.data<de||f.data>ate) return false;
       }
@@ -1537,7 +1545,7 @@ function Relatorio() {
     return {totalDelivery,lucroDelivery,totalFeira,lucroFeira,totalGeral,lucroGeral,pendente,pago,
       qtdDelivery:vf.length,qtdFeira:ff.length,ranking,rankingVendedores,rankingCompradores,timeline,
       vendasPendentes:vf.filter(v=>v.status==='pendente')};
-  },[gerado,filtro,vendas,feirinha,produtos,vendedores,compradores,participacoes]);
+  },[gerado,filtro,vendas,feirinha,produtos,vendedores,compradores,participacoes,feirasCadastro]);
 
   return (
     <div>
@@ -1800,6 +1808,8 @@ function Dashboard({ syncing, setSyncing }) {
 
   const vendasFiltradas = useMemo(()=>{
     if(!filtroAtivo) return vendas;
+    // Se filtro de feira/participação ativo, não mostrar delivery (seria confuso)
+    if(periodo.participacao_id) return [];
     return vendas.filter(v=>{
       if(periodo.de&&v.data<periodo.de) return false;
       if(periodo.ate&&v.data>periodo.ate) return false;

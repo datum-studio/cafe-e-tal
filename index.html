@@ -921,8 +921,12 @@ function Vendas({ syncing, setSyncing }) {
                 {i===0&&<label>Produto</label>}
                 <select value={it.produto_id} onChange={e=>setEditandoVenda(v=>({...v,itens:v.itens.map((x,idx)=>idx===i?{...x,produto_id:e.target.value}:x)}))}>
                   <option value="">Selecionar...</option>
-                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}
+                  {prodAtivos.map(p=>{
+                    const stk=estoqueFeirinha[p.id]?.qtd??0;
+                    return <option key={p.id} value={p.id}>{p.nome}{stk>0?` (${stk})`:''}</option>;
+                  })}
                 </select>
+                {(()=>{const p=produtos.find(x=>x.id===it.produto_id);const stk=estoqueFeirinha[p?.id]?.qtd??0;return p&&stk>0&&stk<=3?<div style={{fontSize:11,color:'var(--warning)',marginTop:2}}>{`⚠ Estoque baixo: ${stk} un`}</div>:null;})()}
               </div>
               <div className="field" style={{width:70}}>
                 {i===0&&<label>Qtd</label>}
@@ -1230,8 +1234,12 @@ function Feirinha({ syncing, setSyncing }) {
                 {i===0&&<label>Produto</label>}
                 <select value={it.produto_id} onChange={e=>autoPreco(i,e.target.value)}>
                   <option value="">Selecionar...</option>
-                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}
+                  {prodAtivos.map(p=>{
+                    const stk=estoqueFeirinha[p.id]?.qtd??0;
+                    return <option key={p.id} value={p.id}>{p.nome}{stk>0?` (${stk})`:''}</option>;
+                  })}
                 </select>
+                {(()=>{const p=produtos.find(x=>x.id===it.produto_id);const stk=estoqueFeirinha[p?.id]?.qtd??0;return p&&stk>0&&stk<=3?<div style={{fontSize:11,color:'var(--warning)',marginTop:2}}>{`⚠ Estoque baixo: ${stk} un`}</div>:null;})()}
               </div>
               <div className="field" style={{width:70}}>
                 {i===0&&<label>Qtd</label>}

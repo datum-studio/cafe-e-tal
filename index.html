@@ -173,6 +173,7 @@
     .sidebar { display: none; }
     .bottom-nav { display: flex !important; }
     .content-area { padding: 1rem; padding-bottom: 80px; }
+    .no-mobile { display: none !important; }
   }
   .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border); z-index: 100; padding: 6px 0 env(safe-area-inset-bottom); }
   .bottom-nav-inner { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 4px; }
@@ -2919,7 +2920,7 @@ function App() {
           ))}
         </div>
       </nav>
-      <footer className="no-print" style={{padding:'20px 28px',fontFamily:"'Geist',system-ui,sans-serif",borderTop:'1px solid var(--border)'}}>
+      <footer className="no-print no-mobile" style={{padding:'20px 28px',fontFamily:"'Geist',system-ui,sans-serif",borderTop:'1px solid var(--border)'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
           <div style={{fontSize:'0.88rem',color:'var(--text)',lineHeight:1.4}}>
             <span style={{fontWeight:400}}>Developed by </span><span style={{fontWeight:600}}>Datum Studio</span>

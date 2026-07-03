@@ -777,7 +777,8 @@ function Vendas({ syncing, setSyncing }) {
     t+=`💰 *TOTAL: ${fmt(venda.total)}*\n`;
     if(venda.obs) t+=`📝 ${venda.obs}\n`;
     if(venda.status==='pago') t+=`\n✅ *PAGAMENTO CONFIRMADO*\n`;
-    t+=`\\n🔑 *Chave Pix:* cafeetal01@gmail.com\\n\\nObrigada pela preferência! 🙏☕`;
+    if(venda.status!=='pago') t+=`\n🔑 *Chave Pix:* cafeetal01@gmail.com\n`;
+    t+=`\nObrigada pela preferência! 🙏☕`;
     setNotaModal({texto:t,venda,comp});
   }
 

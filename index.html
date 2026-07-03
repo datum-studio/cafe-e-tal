@@ -167,7 +167,7 @@
   .sidebar-label { font-size: 13px; font-weight: 600; color: var(--text-muted); line-height: 1.2; }
   .sidebar-card.active .sidebar-label { color: var(--wine); }
   .sidebar-sub { font-size: 11px; color: var(--text-muted); opacity: 0.7; }
-  .content-area { flex: 1; padding: 1.5rem; overflow-y: auto; min-width: 0; }
+  .content-area { flex: 1; padding: 1.5rem; overflow-y: auto; min-width: 0; display: flex; flex-direction: column; }
 
   @media (max-width: 640px) {
     .sidebar { display: none; }
@@ -2908,6 +2908,18 @@ function App() {
           {page==='produtos'&&<Produtos syncing={syncing} setSyncing={setSyncing}/>}
           {page==='vendedores'&&<Vendedores syncing={syncing} setSyncing={setSyncing}/>}
           {page==='cadastros'&&<Cadastros syncing={syncing} setSyncing={setSyncing}/>}
+          <footer className="no-print no-mobile" style={{padding:'20px 28px',fontFamily:"'Geist',system-ui,sans-serif",borderTop:'1px solid var(--border)',marginTop:'auto'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+              <div style={{fontSize:'0.88rem',color:'var(--text)',lineHeight:1.4}}>
+                <span style={{fontWeight:400}}>Developed by </span><span style={{fontWeight:600}}>Datum Studio</span>
+              </div>
+              <div style={{textAlign:'right',color:'var(--text-muted)',fontSize:'0.72rem',lineHeight:1.7}}>
+                <div>Café &amp; Tal</div>
+                <div>v1.0.0</div>
+                <div>© <span id="footer-ano">2026</span></div>
+              </div>
+            </div>
+          </footer>
         </main>
       </div>
       <nav className="bottom-nav no-print">
@@ -2920,18 +2932,6 @@ function App() {
           ))}
         </div>
       </nav>
-      <footer className="no-print no-mobile" style={{padding:'20px 28px',fontFamily:"'Geist',system-ui,sans-serif",borderTop:'1px solid var(--border)'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
-          <div style={{fontSize:'0.88rem',color:'var(--text)',lineHeight:1.4}}>
-            <span style={{fontWeight:400}}>Developed by </span><span style={{fontWeight:600}}>Datum Studio</span>
-          </div>
-          <div style={{textAlign:'right',color:'var(--text-muted)',fontSize:'0.72rem',lineHeight:1.7}}>
-            <div>Café &amp; Tal</div>
-            <div>v1.0.0</div>
-            <div>© <span id="footer-ano">2026</span></div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

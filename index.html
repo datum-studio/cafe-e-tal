@@ -785,6 +785,7 @@ function Vendas({ syncing, setSyncing }) {
   const prodAtivos = produtos.filter(p=>p.ativo);
   const vendasFiltradas = filtro==='todos'?vendas:vendas.filter(v=>v.status===filtro);
   const pendentesQtd = vendas.filter(v=>v.status==='pendente').length;
+  const vendasNaoEntregues = vendas.filter(v=>!v.entregue).length;
 
   if(loading) return <div className="loading-screen"><div className="spinner"/></div>;
 
@@ -795,7 +796,10 @@ function Vendas({ syncing, setSyncing }) {
         <button className={`tab-btn ${tab==='nova'?'active':''}`} onClick={()=>setTab('nova')}>Nova venda</button>
         <button className={`tab-btn ${tab==='lista'?'active':''}`} onClick={()=>setTab('lista')}>Histórico</button>
         <button className={`tab-btn ${tab==='pendentes'?'active':''}`} onClick={()=>setTab('pendentes')}>
-          Pendências {pendentesQtd>0&&<span className="badge badge-gold" style={{marginLeft:4}}>{pendentesQtd}</span>}
+          Pagamentos {pendentesQtd>0&&<span className="badge badge-gold" style={{marginLeft:4}}>{pendentesQtd}</span>}
+        </button>
+        <button className={`tab-btn ${tab==='entregas'?'active':''}`} onClick={()=>setTab('entregas')}>
+          Entregas {vendasNaoEntregues>0&&<span className="badge badge-gold" style={{marginLeft:4}}>{vendasNaoEntregues}</span>}
         </button>
         {editandoVenda&&<button className={`tab-btn ${tab==='editar'?'active':''}`} onClick={()=>setTab('editar')} style={{color:'var(--warning)'}}>✏ Editando</button>}
       </div>
@@ -890,6 +894,33 @@ function Vendas({ syncing, setSyncing }) {
             </div>
             <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
           </div>
+        </div>
+      )}
+
+      {tab==='entregas'&&(
+        <div className="card">
+          {vendas.filter(v=>!v.entregue).length===0
+            ?<div className="empty-state">🎉 Todas as vendas foram entregues!</div>
+            :[...vendas.filter(v=>!v.entregue)].sort((a,b)=>a.data?.localeCompare(b.data)).map(v=>{
+              const comp=compradores.find(c=>c.id===v.comprador_id);
+              return (
+                <div key={v.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--cream-dark)',flexWrap:'wrap',gap:8}}>
+                  <div>
+                    <div style={{fontWeight:700}}>{comp?.nome||'-'}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?.cidade} · {v.data}</div>
+                    <div style={{fontSize:12,marginTop:2}}>
+                      {v.itens?.map((it,i)=>{const p=produtos.find(x=>x.id===it.produto_id);return <span key={i} style={{marginRight:6}}>{p?.nome||'?'} ×{it.qtd}</span>;})}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <span style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</span>
+                    <span className={`badge ${v.status==='pago'?'badge-green':'badge-gold'}`}>{v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span>
+                    <button className="btn btn-primary btn-sm" onClick={()=>toggleEntregue(v)}>✅ Marcar entregue</button>
+                  </div>
+                </div>
+              );
+            })
+          }
         </div>
       )}
 
@@ -998,7 +1029,7 @@ function Vendas({ syncing, setSyncing }) {
             <table>
               <thead><tr><th>Data</th><th>Comprador</th><th>Vendedor</th><th>Total</th><th>Pagamento</th><th>Entrega</th><th></th></tr></thead>
               <tbody>
-                {vendasFiltradas.length===0&&<tr><td colSpan={6}><div className="empty-state">Nenhuma venda encontrada</div></td></tr>}
+                {vendasFiltradas.length===0&&<tr><td colSpan={7}><div className="empty-state">Nenhuma venda encontrada</div></td></tr>}
                 {[...vendasFiltradas].sort((a,b)=>b.data?.localeCompare(a.data)).map(v=>{
                   const comp=compradores.find(c=>c.id===v.comprador_id);
                   const vend=vendedores.find(x=>x.id===v.vendedor_id);
@@ -1011,6 +1042,11 @@ function Vendas({ syncing, setSyncing }) {
                       <td>
                         <span className={`badge ${v.status==='pago'?'badge-green':'badge-gold'}`} style={{cursor:'pointer'}} onClick={()=>togglePago(v)} title="Clique para alternar">
                           {v.status==='pago'?'✅ Pago':'⏳ Pendente'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${v.entregue?'badge-green':'badge-red'}`} style={{cursor:'pointer'}} onClick={()=>toggleEntregue(v)} title={v.entregue?'Clique para desmarcar entrega':'Clique para marcar como entregue'}>
+                          {v.entregue?'✅ Entregue':'🚚 Não entregue'}
                         </span>
                       </td>
                       <td style={{display:'flex',gap:4}}>
@@ -1041,9 +1077,6 @@ function Vendas({ syncing, setSyncing }) {
                   </div>
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
                     <span style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</span>
-                    <span className={`badge ${v.entregue?'badge-green':'badge-red'}`} style={{cursor:'pointer'}} onClick={()=>toggleEntregue(v)} title="Alternar entrega">
-                      {v.entregue?'📦 Entregue':'🚚 Não entregue'}
-                    </span>
                     <button className="btn btn-gold btn-sm" onClick={()=>gerarNota(v)}>📋 Nota</button>
                     <button className="btn btn-ghost btn-sm" onClick={()=>togglePago(v)}>✅ Marcar pago</button>
                   </div>

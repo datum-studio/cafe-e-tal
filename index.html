@@ -126,6 +126,12 @@
   .tab-bar { display: flex; gap: 4px; margin-bottom: 1rem; background: var(--cream-dark); padding: 4px; border-radius: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .tab-bar::-webkit-scrollbar { display: none; }
   .tab-btn { flex-shrink: 0; padding: 7px 12px; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; background: none; color: var(--text-muted); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .tab-btn.tab-nova { background: var(--wine); color: #fff; box-shadow: 0 2px 6px rgba(139,26,74,0.3); }
+  .tab-btn.tab-nova.active { background: var(--wine-dark); color: #fff; outline: 2px solid var(--gold); }
+  .fab-nova { position: fixed; right: 20px; bottom: 24px; z-index: 90; background: var(--wine); color: #fff; border: 2px solid var(--gold); border-radius: 28px; padding: 14px 20px; font-size: 15px; font-weight: 700; box-shadow: 0 6px 18px rgba(139,26,74,0.4); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .fab-nova:hover { background: var(--wine-dark); }
+  .scroll-y { max-height: 62vh; overflow-y: auto; border: 1px solid var(--cream-dark); border-radius: 8px; }
+  .scroll-y th { position: sticky; top: 0; background: #fff; z-index: 1; }
   .tab-btn.active { background: #fff; color: var(--wine); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
   .modal-bg { position: fixed; inset: 0; background: rgba(44,24,16,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
   .modal { background: #fff; border-radius: 14px; padding: 1.5rem; width: 100%; max-width: 520px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
@@ -175,6 +181,7 @@
     .content-area { padding: 1rem; padding-bottom: 16px; }
     footer.no-print { margin-bottom: 64px; }
   }
+  @media (max-width: 640px) { .fab-nova { bottom: 78px; right: 14px; } }
   .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border); z-index: 100; padding: 6px 0 env(safe-area-inset-bottom); }
   .bottom-nav-inner { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 4px; }
   .bottom-nav-inner::-webkit-scrollbar { display: none; }
@@ -213,6 +220,10 @@
   .combo-item small { color: var(--text-muted); }
   .combo-novo { color: var(--wine); font-weight: 700; }
   .sel-box { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border: 1.5px solid var(--wine); border-radius: 8px; background: #F5E6ED; }
+  .pcard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .pcard { border: 1.5px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; }
+  .stk-box { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 8px; background: var(--cream); font-size: 12px; }
+  .stk-box b { font-size: 16px; }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   @media print {
     .no-print { display: none !important; }
@@ -655,36 +666,40 @@ function Produtos({ syncing, setSyncing }) {
             <button className={'chip '+(filtroCat==='sem'?'active':'')} onClick={()=>setFiltroCat('sem')}>Sem categoria</button>
           </div>
         )}
-        <div className="scroll-x">
-          <table>
-            <thead><tr><th>Produto</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Stk Delivery</th><th>Stk Feira</th><th>Ativo</th><th></th></tr></thead>
-            <tbody>
-              {produtos.length===0 && <tr><td colSpan={8}><div className="empty-state">Nenhum produto cadastrado</div></td></tr>}
-              {produtos.length>0 && produtosVisiveis.length===0 && <tr><td colSpan={8}><div className="empty-state">Nenhum produto neste filtro</div></td></tr>}
-              {produtosVisiveis.map(p => {
-                const margem = p.custo>0?((p.venda-p.custo)/p.venda*100).toFixed(0)+'%':'-';
-                return (
-                  <tr key={p.id} style={{opacity:p.ativo?1:0.5}}>
-                    <td style={{fontWeight:600}}>{p.destaque?'⭐ ':''}{p.nome}{nomeCat(p.categoria_id)&&<div style={{fontSize:11,color:'var(--text-muted)',fontWeight:400}}>{nomeCat(p.categoria_id)}</div>}</td>
-                    <td>{fmt(p.custo)}</td>
-                    <td style={{color:'var(--wine)',fontWeight:700}}>{fmt(p.venda)}</td>
-                    <td><span className="badge badge-green">{margem}</span></td>
-                    <td>{estoqueDelivery[p.id]?.qtd??0}</td>
-                    <td>{estoqueFeirinha[p.id]?.qtd??0}</td>
-                    <td><label className="toggle"><input type="checkbox" checked={!!p.ativo} onChange={()=>toggleAtivo(p)}/><span className="toggle-slider"/></label></td>
-                    <td>
-                      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                        <button className="btn btn-ghost btn-sm" onClick={()=>toggleDestaque(p)} title={p.destaque?'Tirar do topo':'Fixar no topo'}>{p.destaque?'⭐':'☆'}</button>
-                        <button className="btn btn-ghost btn-sm" onClick={()=>{setNomeEdit({id:p.id,nome:p.nome,categoria_id:p.categoria_id||'',custo:String(p.custo??''),venda:String(p.venda??'')});window.scrollTo({top:0,behavior:'smooth'});}}>✏ Editar</button>
-                        <button className="btn btn-ghost btn-sm" onClick={()=>setEstoqueEdit({id:p.id,delivery:estoqueDelivery[p.id]?.qtd??0,feirinha:estoqueFeirinha[p.id]?.qtd??0})}>📦 Estoque</button>
-                        <button className="btn btn-danger btn-sm" onClick={()=>excluir(p.id)}>✕</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        {produtos.length===0 && <div className="empty-state">Nenhum produto cadastrado</div>}
+        {produtos.length>0 && produtosVisiveis.length===0 && <div className="empty-state">Nenhum produto neste filtro</div>}
+        <div className="pcard-grid">
+          {produtosVisiveis.map(p => {
+            const margem = p.custo>0?((p.venda-p.custo)/p.venda*100).toFixed(0)+'%':'-';
+            const ed = estoqueDelivery[p.id]?.qtd??0;
+            const ef = estoqueFeirinha[p.id]?.qtd??0;
+            return (
+              <div key={p.id} className="pcard" style={{opacity:p.ativo?1:0.55}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:15}}>{p.destaque?'⭐ ':''}{p.nome}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)'}}>{nomeCat(p.categoria_id)||'Sem categoria'}{!p.ativo?' · Inativo':''}</div>
+                  </div>
+                  <label className="toggle" title={p.ativo?'Ativo':'Inativo'}><input type="checkbox" checked={!!p.ativo} onChange={()=>toggleAtivo(p)}/><span className="toggle-slider"/></label>
+                </div>
+                <div style={{display:'flex',alignItems:'baseline',gap:10,margin:'8px 0'}}>
+                  <span style={{fontSize:20,fontWeight:700,color:'var(--wine)'}}>{fmt(p.venda)}</span>
+                  <span style={{fontSize:12,color:'var(--text-muted)'}}>custo {fmt(p.custo)}</span>
+                  <span className="badge badge-green">{margem}</span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
+                  <div className="stk-box" style={{color:ed===0?'var(--danger)':'var(--text)'}}><span>Delivery</span><b>{ed}</b></div>
+                  <div className="stk-box" style={{color:ef===0?'var(--danger)':'var(--text)'}}><span>Feira</span><b>{ef}</b></div>
+                </div>
+                <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>toggleDestaque(p)} title={p.destaque?'Tirar do topo':'Fixar no topo'}>{p.destaque?'⭐':'☆'}</button>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>{setNomeEdit({id:p.id,nome:p.nome,categoria_id:p.categoria_id||'',custo:String(p.custo??''),venda:String(p.venda??'')});window.scrollTo({top:0,behavior:'smooth'});}}>✏ Editar</button>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>{setEstoqueEdit({id:p.id,delivery:ed,feirinha:ef});window.scrollTo({top:0,behavior:'smooth'});}}>📦 Estoque</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>excluir(p.id)}>✕</button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -851,6 +866,7 @@ function Compradores({ syncing, setSyncing }) {
   const [form, setForm] = useState({nome:'',telefone:'',cidade:'',endereco:''});
   const [editando, setEditando] = useState(null);
   const [alert, setAlert] = useState(null);
+  const [buscaC, setBuscaC] = useState('');
 
   function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
 
@@ -922,11 +938,14 @@ function Compradores({ syncing, setSyncing }) {
       )}
 
       <div className="card">
+        <input value={buscaC} onChange={e=>setBuscaC(e.target.value)} placeholder="Buscar por nome, cidade ou telefone..." style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:16,background:'var(--cream)',marginBottom:8}}/>
+        <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:6}}>{compradores.length} comprador{compradores.length!==1?'es':''}</div>
+        <div className="scroll-y">
         <table>
           <thead><tr><th>Nome</th><th>Cidade</th><th>Telefone</th><th>Situação</th><th></th></tr></thead>
           <tbody>
             {compradores.length===0 && <tr><td colSpan={5}><div className="empty-state">Nenhum comprador cadastrado</div></td></tr>}
-            {compradores.map(c => {
+            {[...compradores].filter(c=>{const q=buscaC.trim().toLowerCase();return !q||(c.nome||'').toLowerCase().includes(q)||(c.cidade||'').toLowerCase().includes(q)||(c.telefone||'').includes(q);}).sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).map(c => {
               const pendente = vendas.filter(v=>v.comprador_id===c.id&&v.status==='pendente').length>0;
               return (
                 <tr key={c.id}>
@@ -940,13 +959,14 @@ function Compradores({ syncing, setSyncing }) {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
 }
 
 // ── VENDAS ────────────────────────────────────────────────────────
-function Vendas({ syncing, setSyncing }) {
+function Vendas({ syncing, setSyncing, novaSignal }) {
   const { arr: produtos } = useFirestore('produtos');
   const { arr: vendedores } = useFirestore('vendedores');
   const { arr: compradores } = useFirestore('compradores');
@@ -965,6 +985,7 @@ function Vendas({ syncing, setSyncing }) {
   const [alert, setAlert] = useState(null);
   const [notaModal, setNotaModal] = useState(null);
   const [editandoVenda, setEditandoVenda] = useState(null);
+  useEffect(()=>{ if(novaSignal){ setEditandoVenda(null); setTab('nova'); } },[novaSignal]);
   const [filtro, setFiltro] = useState('todos');
 
   function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
@@ -1118,7 +1139,7 @@ function Vendas({ syncing, setSyncing }) {
     <div>
       <div className="page-title">🛒 Vendas</div>
       <div className="tab-bar">
-        <button className={`tab-btn ${tab==='nova'?'active':''}`} onClick={()=>setTab('nova')}>Nova venda</button>
+        <button className={`tab-btn tab-nova ${tab==='nova'?'active':''}`} onClick={()=>setTab('nova')}>+ Nova venda</button>
         <button className={`tab-btn ${tab==='lista'?'active':''}`} onClick={()=>setTab('lista')}>Histórico</button>
         <button className={`tab-btn ${tab==='pendentes'?'active':''}`} onClick={()=>setTab('pendentes')}>
           Pagamentos {pendentesQtd>0&&<span className="badge badge-gold" style={{marginLeft:4}}>{pendentesQtd}</span>}
@@ -3193,6 +3214,8 @@ function App() {
   const [page, setPageState] = useState(()=>lsGet('pagina','dashboard'));
   function setPage(id){ setPageState(id); lsSet('pagina',id); window.scrollTo(0,0); }
   const [syncing, setSyncing] = useState(false);
+  const [novaSignal, setNovaSignal] = useState(0);
+  function novaVenda(){ setNovaSignal(n=>n+1); setPage('vendas'); }
 
   useEffect(()=>{
     // Firebase pode já ter carregado antes do React montar
@@ -3252,7 +3275,7 @@ function App() {
         </aside>
         <main className="content-area">
           {page==='dashboard'&&<Dashboard syncing={syncing} setSyncing={setSyncing}/>}
-          {page==='vendas'&&<Vendas syncing={syncing} setSyncing={setSyncing}/>}
+          {page==='vendas'&&<Vendas syncing={syncing} setSyncing={setSyncing} novaSignal={novaSignal}/>}
           {page==='feirinha'&&<Feirinha syncing={syncing} setSyncing={setSyncing}/>}
           {page==='compradores'&&<Compradores syncing={syncing} setSyncing={setSyncing}/>}
           {page==='producao'&&<Producao/>}
@@ -3273,6 +3296,7 @@ function App() {
           </div>
         </div>
       </footer>
+      {page!=='vendas' && page!=='feirinha' && <button className="fab-nova no-print" onClick={novaVenda}>+ Nova venda</button>}
       <nav className="bottom-nav no-print">
         <div className="bottom-nav-inner">
           {pages.map(p=>(

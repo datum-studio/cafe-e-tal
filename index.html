@@ -184,6 +184,36 @@
   .bnav-btn.active .bnav-label { color: var(--wine); }
   .bnav-btn.active .bnav-icon { filter: none; }
 
+  :focus-visible { outline: 2px solid var(--gold-dark); outline-offset: 2px; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 8px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; padding: 6px 12px; border-radius: 20px; border: 1.5px solid var(--border); background: #fff; color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .chip:hover { border-color: var(--wine); color: var(--wine); }
+  .chip.active { background: var(--wine); border-color: var(--wine); color: #fff; }
+  .prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 8px; max-height: 280px; overflow-y: auto; padding: 2px; }
+  .prod-tile { position: relative; text-align: left; padding: 10px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--cream); cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-height: 62px; }
+  .prod-tile:hover { border-color: var(--wine); background: #fff; }
+  .prod-tile:active { transform: scale(0.97); }
+  .prod-tile.sel { border-color: var(--wine); background: #F5E6ED; }
+  .prod-tile .pt-nome { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.25; }
+  .prod-tile .pt-preco { font-size: 12px; font-weight: 700; color: var(--wine); }
+  .prod-tile .pt-stk { font-size: 11px; color: var(--text-muted); }
+  .prod-tile .pt-qtd { position: absolute; top: -6px; right: -6px; background: var(--wine); color: #fff; font-size: 11px; font-weight: 700; min-width: 22px; height: 22px; border-radius: 11px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+  .section-label { margin-bottom: 8px; font-weight: 700; font-size: 12px; color: var(--text-muted); letter-spacing: 0.5px; }
+  .cart-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--cream-dark); }
+  .cart-row:last-child { border-bottom: none; }
+  .stepper { display: flex; align-items: center; border: 1.5px solid var(--border); border-radius: 8px; overflow: hidden; background: #fff; }
+  .stepper button { width: 34px; height: 34px; border: none; background: var(--cream); font-size: 18px; font-weight: 700; color: var(--wine); cursor: pointer; }
+  .stepper button:hover { background: var(--cream-dark); }
+  .stepper input { width: 42px; text-align: center; border: none; font-size: 14px; font-weight: 700; padding: 0; background: #fff; }
+  .cart-price { width: 80px; padding: 6px 8px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 14px; background: var(--cream); }
+  .combo-list { border: 1.5px solid var(--border); border-radius: 8px; background: #fff; margin-top: 4px; overflow: hidden; }
+  .combo-item { display: block; width: 100%; text-align: left; padding: 10px 12px; border: none; border-bottom: 1px solid var(--cream-dark); background: #fff; cursor: pointer; font-size: 14px; }
+  .combo-item:hover { background: var(--cream); }
+  .combo-item small { color: var(--text-muted); }
+  .combo-novo { color: var(--wine); font-weight: 700; }
+  .sel-box { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border: 1.5px solid var(--wine); border-radius: 8px; background: #F5E6ED; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   @media print {
     .no-print { display: none !important; }
     body { background: white; }
@@ -198,6 +228,10 @@
     .form-row.cols2, .form-row.cols3, .form-row.cols4 { grid-template-columns: 1fr; }
     .main { padding: 1rem; }
     .item-linha { flex-wrap: wrap; }
+    .field input, .field select, .field textarea, .cart-price { font-size: 16px; }
+    .btn { min-height: 40px; }
+    .btn-sm { min-height: 36px; }
+    .prod-grid { max-height: 240px; grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -227,7 +261,7 @@ function subscribeCol(colName, callback) {
 
 // ── Utils ─────────────────────────────────────────────────────────
 function fmt(n) { return Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
-function pct(a,b) { return b>0?((a/b)*100).toFixed(1)+'%':'—'; }
+function pct(a,b) { return b>0?((a/b)*100).toFixed(1)+'%':'-'; }
 function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function hoje() { return new Date().toISOString().slice(0,10); }
 function primeiroDiaMes() { const d=new Date();d.setDate(1);return d.toISOString().slice(0,10); }
@@ -246,16 +280,223 @@ function useFirestore(colName) {
 }
 
 // ── PRODUTOS ──────────────────────────────────────────────────────
+function fdata(d){ return d ? d.split('-').reverse().join('/') : ''; }
+function lsGet(k,def){ try{ const v=localStorage.getItem(k); return v===null?def:v; }catch(e){ return def; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+function addProdutoAosItens(itens, pid){
+  const i = itens.findIndex(it=>it.produto_id===pid);
+  if(i>=0) return itens.map((it,idx)=>idx===i?{...it,qtd:(parseInt(it.qtd)||0)+1}:it);
+  const vazio = itens.findIndex(it=>!it.produto_id);
+  if(vazio>=0) return itens.map((it,idx)=>idx===vazio?{...it,produto_id:pid,qtd:1}:it);
+  return [...itens,{produto_id:pid,qtd:1}];
+}
+
+// Catálogo rápido: busca + categorias + botões de produto
+function SeletorProdutos({ produtos, categorias, estoque, itens, onAdd }) {
+  const [cat, setCat] = useState('todas');
+  const [busca, setBusca] = useState('');
+  const ativos = produtos.filter(p=>p.ativo);
+  const idsCat = new Set(categorias.map(c=>c.id));
+  const temSem = ativos.some(p=>!p.categoria_id || !idsCat.has(p.categoria_id));
+  const catsComProduto = [...categorias].sort((a,b)=>a.nome.localeCompare(b.nome)).filter(c=>ativos.some(p=>p.categoria_id===c.id));
+  const q = busca.trim().toLowerCase();
+  const lista = ativos.filter(p=>{
+    const semCat = !p.categoria_id || !idsCat.has(p.categoria_id);
+    if(cat==='sem' && !semCat) return false;
+    if(cat!=='todas' && cat!=='sem' && p.categoria_id!==cat) return false;
+    if(q && !p.nome.toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a,b)=>(b.destaque?1:0)-(a.destaque?1:0)||a.nome.localeCompare(b.nome));
+  const qtdNoPedido = (pid)=> itens.filter(it=>it.produto_id===pid).reduce((a,it)=>a+(parseInt(it.qtd)||0),0);
+
+  return (
+    <div>
+      <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar produto..." style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:16,background:'var(--cream)',marginBottom:8}}/>
+      {(catsComProduto.length>0) && (
+        <div className="chips">
+          <button className={'chip '+(cat==='todas'?'active':'')} onClick={()=>setCat('todas')}>Todos</button>
+          {catsComProduto.map(c=><button key={c.id} className={'chip '+(cat===c.id?'active':'')} onClick={()=>setCat(c.id)}>{c.nome}</button>)}
+          {temSem && <button className={'chip '+(cat==='sem'?'active':'')} onClick={()=>setCat('sem')}>Sem categoria</button>}
+        </div>
+      )}
+      {lista.length===0
+        ? <div style={{padding:'14px 4px',fontSize:13,color:'var(--text-muted)'}}>Nenhum produto encontrado.</div>
+        : <div className="prod-grid">
+            {lista.map(p=>{
+              const n = qtdNoPedido(p.id);
+              const stk = estoque[p.id]?.qtd ?? 0;
+              return (
+                <button key={p.id} className={'prod-tile '+(n>0?'sel':'')} onClick={()=>onAdd(p.id)}>
+                  {n>0 && <span className="pt-qtd">{n}</span>}
+                  <span className="pt-nome">{p.destaque?'⭐ ':''}{p.nome}</span>
+                  <span className="pt-preco">{fmt(p.venda)}</span>
+                  {stk>0 && <span className="pt-stk">{stk} em estoque</span>}
+                </button>
+              );
+            })}
+          </div>
+      }
+    </div>
+  );
+}
+
+// Lista do pedido: nome, quantidade com + e -, remover
+function ListaItens({ itens, produtos, estoque, onQtd, onRemover, onPreco }) {
+  const linhas = itens.map((it,i)=>({it:it,i:i,p:produtos.find(x=>x.id===it.produto_id)})).filter(l=>l.it.produto_id);
+  if(linhas.length===0) return <div style={{padding:'10px 0',fontSize:13,color:'var(--text-muted)'}}>Toque nos produtos acima para montar o pedido.</div>;
+  return (
+    <div>
+      {linhas.map(l=>{
+        const stk = estoque[l.it.produto_id]?.qtd ?? 0;
+        const n = parseInt(l.it.qtd)||0;
+        return (
+          <div key={l.i} className="cart-row">
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:600,fontSize:14}}>{l.p?l.p.nome:'Produto removido'}</div>
+              <div style={{fontSize:12,color:'var(--text-muted)'}}>
+                {!onPreco && l.p ? fmt(l.p.venda)+' cada' : ''}
+                {stk>0 && stk<=3 ? <span style={{color:'var(--warning)'}}>{(!onPreco?' · ':'')+'⚠ estoque baixo: '+stk+' un'}</span> : null}
+              </div>
+            </div>
+            {onPreco && <input className="cart-price" type="number" step="0.01" value={l.it.preco_unitario} onChange={e=>onPreco(l.i,e.target.value)} placeholder="0,00"/>}
+            <div className="stepper">
+              <button onClick={()=>n-1<1?onRemover(l.i):onQtd(l.i,n-1)} aria-label="Diminuir">-</button>
+              <input type="number" min="1" value={l.it.qtd} onChange={e=>onQtd(l.i,e.target.value)}/>
+              <button onClick={()=>onQtd(l.i,n+1)} aria-label="Aumentar">+</button>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={()=>onRemover(l.i)} aria-label="Remover">✕</button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Comprador: busca rápida + cadastro na hora
+function SeletorComprador({ compradores, cidades, value, onChange }) {
+  const [busca, setBusca] = useState('');
+  const [aberto, setAberto] = useState(false);
+  const [novo, setNovo] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  const sel = compradores.find(c=>c.id===value);
+  const q = busca.trim().toLowerCase();
+  const achados = compradores.filter(c=>!q || (c.nome||'').toLowerCase().includes(q) || (c.cidade||'').toLowerCase().includes(q) || (c.telefone||'').includes(q))
+    .sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).slice(0,8);
+
+  function abrirNovo(){
+    setNovo({nome:busca.trim(), telefone:'', cidade:lsGet('ultima_cidade','')});
+    setErro('');
+  }
+  async function criar(){
+    if(!novo.nome.trim()) return setErro('Informe o nome.');
+    if(!novo.cidade) return setErro('Escolha a cidade.');
+    setSalvando(true);
+    try {
+      const id = uid();
+      await saveDoc('compradores', id, {nome:novo.nome.trim(), telefone:novo.telefone, cidade:novo.cidade, endereco:''});
+      lsSet('ultima_cidade', novo.cidade);
+      onChange(id);
+      setNovo(null); setBusca(''); setAberto(false);
+    } catch(e){ setErro('Erro ao salvar. Tente novamente.'); }
+    setSalvando(false);
+  }
+
+  if(novo) return (
+    <div style={{border:'1.5px solid var(--gold)',borderRadius:10,padding:12,background:'var(--cream)'}}>
+      <div style={{fontWeight:700,fontSize:13,color:'var(--wine)',marginBottom:8}}>Novo comprador</div>
+      {erro && <div className="alert alert-danger">{erro}</div>}
+      <div className="form-row cols3">
+        <div className="field"><label>Nome</label><input autoFocus value={novo.nome} onChange={e=>setNovo(n=>({...n,nome:e.target.value}))}/></div>
+        <div className="field"><label>Cidade</label>
+          <select value={novo.cidade} onChange={e=>setNovo(n=>({...n,cidade:e.target.value}))}>
+            <option value="">Selecionar...</option>
+            {[...cidades].sort((a,b)=>a.nome.localeCompare(b.nome)).map(c=><option key={c.id} value={c.nome}>{c.nome}</option>)}
+          </select>
+        </div>
+        <div className="field"><label>Telefone (opcional)</label><input type="tel" value={novo.telefone} onChange={e=>setNovo(n=>({...n,telefone:e.target.value}))} placeholder="(99) 99999-9999"/></div>
+      </div>
+      {cidades.length===0 && <div style={{fontSize:12,color:'var(--warning)',marginBottom:8}}>Nenhuma cidade cadastrada. Cadastre em Config {'>'} Cidades.</div>}
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-primary" onClick={criar} disabled={salvando}>{salvando?'Salvando...':'Salvar e usar'}</button>
+        <button className="btn btn-ghost" onClick={()=>setNovo(null)}>Cancelar</button>
+      </div>
+    </div>
+  );
+
+  if(sel && !aberto) return (
+    <div className="sel-box">
+      <div style={{minWidth:0}}>
+        <div style={{fontWeight:700}}>{sel.nome}</div>
+        <div style={{fontSize:12,color:'var(--text-muted)'}}>{sel.cidade}{sel.telefone?' · '+sel.telefone:''}</div>
+      </div>
+      <button className="btn btn-ghost btn-sm" onClick={()=>{setAberto(true);setBusca('');}}>Trocar</button>
+    </div>
+  );
+
+  return (
+    <div>
+      <input value={busca} onChange={e=>setBusca(e.target.value)} onFocus={()=>setAberto(true)} placeholder="Buscar por nome, cidade ou telefone..." style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:16,background:'var(--cream)'}}/>
+      <div className="combo-list">
+        {achados.map(c=>(
+          <button key={c.id} className="combo-item" onClick={()=>{onChange(c.id);setAberto(false);setBusca('');}}>
+            <b>{c.nome}</b> <small>{c.cidade}</small>
+          </button>
+        ))}
+        <button className="combo-item combo-novo" onClick={abrirNovo}>+ Cadastrar {busca.trim()?'"'+busca.trim()+'"':'novo comprador'}</button>
+      </div>
+    </div>
+  );
+}
+
 function Produtos({ syncing, setSyncing }) {
   const { arr: produtos, loading } = useFirestore('produtos');
   const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
-  const [form, setForm] = useState({ nome:'', custo:'', venda:'' });
+  const [form, setForm] = useState({ nome:'', custo:'', venda:'', categoria_id:'' });
   const [estoqueEdit, setEstoqueEdit] = useState(null);
   const [nomeEdit, setNomeEdit] = useState(null);
   const [alert, setAlert] = useState(null);
+  const { arr: categorias } = useFirestore('categorias');
+  const [novaCat, setNovaCat] = useState('');
+  const [catEdit, setCatEdit] = useState(null);
+  const [filtroCat, setFiltroCat] = useState('todas');
+  const [busca, setBusca] = useState('');
+  const [mostrarCats, setMostrarCats] = useState(false);
 
   function showAlert(tipo, msg) { setAlert({tipo,msg}); setTimeout(()=>setAlert(null),2500); }
+
+  const catsOrdenadas = [...categorias].sort((a,b)=>a.nome.localeCompare(b.nome));
+  const idsCat = new Set(categorias.map(c=>c.id));
+  const nomeCat = (id)=> { const c = categorias.find(x=>x.id===id); return c ? c.nome : ''; };
+
+  async function criarCategoria() {
+    const nome = novaCat.trim();
+    if(!nome) return;
+    if(categorias.some(c=>c.nome.toLowerCase()===nome.toLowerCase())) return showAlert('danger','Essa categoria já existe.');
+    setSyncing(true);
+    await saveDoc('categorias', uid(), {nome:nome});
+    setNovaCat('');
+    setSyncing(false);
+  }
+  async function renomearCategoria() {
+    const nome = catEdit.nome.trim();
+    if(!nome) return;
+    setSyncing(true);
+    await saveDoc('categorias', catEdit.id, {nome:nome});
+    setCatEdit(null);
+    setSyncing(false);
+  }
+  async function excluirCategoria(c) {
+    const qtd = produtos.filter(p=>p.categoria_id===c.id).length;
+    if(!confirm('Excluir a categoria "'+c.nome+'"?'+(qtd>0?' Os '+qtd+' produto(s) dela ficam sem categoria.':''))) return;
+    setSyncing(true);
+    for(const p of produtos.filter(x=>x.categoria_id===c.id)) await saveDoc('produtos', p.id, {...p, categoria_id:''});
+    await deleteDocById('categorias', c.id);
+    if(filtroCat===c.id) setFiltroCat('todas');
+    setSyncing(false);
+  }
 
   async function salvarNome() {
     if(!nomeEdit.nome.trim()) return;
@@ -263,7 +504,7 @@ function Produtos({ syncing, setSyncing }) {
     if(isNaN(venda) || venda < 0) return showAlert('danger','Informe um preço de venda válido.');
     setSyncing(true);
     const p = produtos.find(x=>x.id===nomeEdit.id);
-    await saveDoc('produtos', nomeEdit.id, {...p, nome:nomeEdit.nome.trim(), custo:parseFloat(nomeEdit.custo)||0, venda:venda});
+    await saveDoc('produtos', nomeEdit.id, {...p, nome:nomeEdit.nome.trim(), custo:parseFloat(nomeEdit.custo)||0, venda:venda, categoria_id:nomeEdit.categoria_id||''});
     setNomeEdit(null);
     showAlert('success','Produto atualizado! Vendas já feitas continuam com os valores da época.');
     setSyncing(false);
@@ -274,10 +515,10 @@ function Produtos({ syncing, setSyncing }) {
     const id = uid();
     setSyncing(true);
     try {
-      await saveDoc('produtos', id, { nome:form.nome, custo:parseFloat(form.custo)||0, venda:parseFloat(form.venda), ativo:true });
+      await saveDoc('produtos', id, { nome:form.nome, custo:parseFloat(form.custo)||0, venda:parseFloat(form.venda), ativo:true, categoria_id:form.categoria_id||'' });
       await saveDoc('estoque_delivery', id, { qtd:0 });
       await saveDoc('estoque_feirinha', id, { qtd:0 });
-      setForm({nome:'',custo:'',venda:''});
+      setForm({nome:'',custo:'',venda:'',categoria_id:form.categoria_id});
       showAlert('success','Produto cadastrado!');
     } catch(e){ showAlert('danger','Erro ao salvar.'); }
     setSyncing(false);
@@ -286,6 +527,12 @@ function Produtos({ syncing, setSyncing }) {
   async function toggleAtivo(p) {
     setSyncing(true);
     await saveDoc('produtos', p.id, {...p, ativo:!p.ativo});
+    setSyncing(false);
+  }
+
+  async function toggleDestaque(p) {
+    setSyncing(true);
+    await saveDoc('produtos', p.id, {...p, destaque:!p.destaque});
     setSyncing(false);
   }
 
@@ -304,6 +551,15 @@ function Produtos({ syncing, setSyncing }) {
     setSyncing(false);
   }
 
+  const qBusca = busca.trim().toLowerCase();
+  const produtosVisiveis = [...produtos].sort((a,b)=>(a.ativo===b.ativo?0:(a.ativo?-1:1))||(b.destaque?1:0)-(a.destaque?1:0)||a.nome.localeCompare(b.nome)).filter(p=>{
+    const semCat = !p.categoria_id || !idsCat.has(p.categoria_id);
+    if(filtroCat==='sem' && !semCat) return false;
+    if(filtroCat!=='todas' && filtroCat!=='sem' && p.categoria_id!==filtroCat) return false;
+    if(qBusca && !p.nome.toLowerCase().includes(qBusca)) return false;
+    return true;
+  });
+
   if (loading) return <div className="loading-screen"><div className="spinner"/><span style={{color:'var(--text-muted)'}}>Carregando produtos...</span></div>;
 
   return (
@@ -312,8 +568,14 @@ function Produtos({ syncing, setSyncing }) {
       {alert && <div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
       <div className="card">
         <div className="card-title">Novo produto</div>
-        <div className="form-row cols3">
+        <div className="form-row cols2">
           <div className="field"><label>Nome</label><input value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} placeholder="Ex: Café Especial 250g"/></div>
+          <div className="field"><label>Categoria</label>
+            <select value={form.categoria_id} onChange={e=>setForm(f=>({...f,categoria_id:e.target.value}))}>
+              <option value="">Sem categoria</option>
+              {catsOrdenadas.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
           <div className="field"><label>Custo (R$)</label><input type="number" value={form.custo} onChange={e=>setForm(f=>({...f,custo:e.target.value}))} placeholder="0,00"/></div>
           <div className="field"><label>Venda (R$)</label><input type="number" value={form.venda} onChange={e=>setForm(f=>({...f,venda:e.target.value}))} placeholder="0,00"/></div>
         </div>
@@ -328,6 +590,14 @@ function Produtos({ syncing, setSyncing }) {
             <div className="field"><label>Custo (R$)</label><input type="number" step="0.01" value={nomeEdit.custo} onChange={e=>setNomeEdit(n=>({...n,custo:e.target.value}))}/></div>
             <div className="field"><label>Venda (R$)</label><input type="number" step="0.01" value={nomeEdit.venda} onChange={e=>setNomeEdit(n=>({...n,venda:e.target.value}))}/></div>
           </div>
+          <div className="form-row cols3">
+            <div className="field"><label>Categoria</label>
+              <select value={nomeEdit.categoria_id} onChange={e=>setNomeEdit(n=>({...n,categoria_id:e.target.value}))}>
+                <option value="">Sem categoria</option>
+                {catsOrdenadas.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+          </div>
           <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:10}}>Novos valores valem para as próximas vendas. Vendas já registradas não mudam.</div>
           <div style={{display:'flex',gap:8}}>
             <button className="btn btn-gold" onClick={salvarNome} disabled={syncing}>Salvar alterações</button>
@@ -338,7 +608,7 @@ function Produtos({ syncing, setSyncing }) {
 
       {estoqueEdit && (
         <div className="card" style={{borderColor:'var(--gold)'}}>
-          <div className="card-title">Ajustar estoque — {produtos.find(p=>p.id===estoqueEdit.id)?.nome}</div>
+          <div className="card-title">Ajustar estoque - {produtos.find(p=>p.id===estoqueEdit.id)?.nome}</div>
           <div className="form-row cols2">
             <div className="field"><label>Estoque Delivery</label><input type="number" value={estoqueEdit.delivery} onChange={e=>setEstoqueEdit(s=>({...s,delivery:e.target.value}))}/></div>
             <div className="field"><label>Estoque Feirinha</label><input type="number" value={estoqueEdit.feirinha} onChange={e=>setEstoqueEdit(s=>({...s,feirinha:e.target.value}))}/></div>
@@ -351,16 +621,51 @@ function Produtos({ syncing, setSyncing }) {
       )}
 
       <div className="card">
+        <div className="card-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setMostrarCats(v=>!v)}>
+          <span>Categorias ({categorias.length})</span>
+          <span style={{fontSize:12,color:'var(--text-muted)',fontWeight:600}}>{mostrarCats?'Fechar':'Gerenciar'}</span>
+        </div>
+        {mostrarCats && (
+          <div>
+            <div style={{display:'flex',gap:8,marginBottom:10}}>
+              <input value={novaCat} onChange={e=>setNovaCat(e.target.value)} onKeyDown={e=>e.key==='Enter'&&criarCategoria()} placeholder="Nova categoria (ex: Cafés, Doces, Kits)" style={{flex:1,padding:'8px 10px',border:'1.5px solid var(--border)',borderRadius:6,fontSize:16,background:'var(--cream)'}}/>
+              <button className="btn btn-primary" onClick={criarCategoria} disabled={syncing}>Adicionar</button>
+            </div>
+            {catsOrdenadas.length===0 && <div style={{fontSize:13,color:'var(--text-muted)'}}>Nenhuma categoria ainda.</div>}
+            {catsOrdenadas.map(c=>(
+              <div key={c.id} className="cart-row">
+                {catEdit && catEdit.id===c.id
+                  ? <input autoFocus value={catEdit.nome} onChange={e=>setCatEdit(x=>({...x,nome:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&renomearCategoria()} style={{flex:1,padding:'6px 8px',border:'1.5px solid var(--wine)',borderRadius:6,fontSize:16}}/>
+                  : <div style={{flex:1,fontWeight:600}}>{c.nome} <span style={{fontSize:12,color:'var(--text-muted)',fontWeight:400}}>({produtos.filter(p=>p.categoria_id===c.id).length} produtos)</span></div>}
+                {catEdit && catEdit.id===c.id
+                  ? <><button className="btn btn-gold btn-sm" onClick={renomearCategoria}>Salvar</button><button className="btn btn-ghost btn-sm" onClick={()=>setCatEdit(null)}>Cancelar</button></>
+                  : <><button className="btn btn-ghost btn-sm" onClick={()=>setCatEdit({id:c.id,nome:c.nome})}>✏</button><button className="btn btn-danger btn-sm" onClick={()=>excluirCategoria(c)}>✕</button></>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar produto..." style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:16,background:'var(--cream)',marginBottom:8}}/>
+        {categorias.length>0 && (
+          <div className="chips">
+            <button className={'chip '+(filtroCat==='todas'?'active':'')} onClick={()=>setFiltroCat('todas')}>Todos ({produtos.length})</button>
+            {catsOrdenadas.map(c=><button key={c.id} className={'chip '+(filtroCat===c.id?'active':'')} onClick={()=>setFiltroCat(c.id)}>{c.nome}</button>)}
+            <button className={'chip '+(filtroCat==='sem'?'active':'')} onClick={()=>setFiltroCat('sem')}>Sem categoria</button>
+          </div>
+        )}
         <div className="scroll-x">
           <table>
             <thead><tr><th>Produto</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Stk Delivery</th><th>Stk Feira</th><th>Ativo</th><th></th></tr></thead>
             <tbody>
               {produtos.length===0 && <tr><td colSpan={8}><div className="empty-state">Nenhum produto cadastrado</div></td></tr>}
-              {produtos.map(p => {
-                const margem = p.custo>0?((p.venda-p.custo)/p.venda*100).toFixed(0)+'%':'—';
+              {produtos.length>0 && produtosVisiveis.length===0 && <tr><td colSpan={8}><div className="empty-state">Nenhum produto neste filtro</div></td></tr>}
+              {produtosVisiveis.map(p => {
+                const margem = p.custo>0?((p.venda-p.custo)/p.venda*100).toFixed(0)+'%':'-';
                 return (
                   <tr key={p.id} style={{opacity:p.ativo?1:0.5}}>
-                    <td style={{fontWeight:600}}>{p.nome}</td>
+                    <td style={{fontWeight:600}}>{p.destaque?'⭐ ':''}{p.nome}{nomeCat(p.categoria_id)&&<div style={{fontSize:11,color:'var(--text-muted)',fontWeight:400}}>{nomeCat(p.categoria_id)}</div>}</td>
                     <td>{fmt(p.custo)}</td>
                     <td style={{color:'var(--wine)',fontWeight:700}}>{fmt(p.venda)}</td>
                     <td><span className="badge badge-green">{margem}</span></td>
@@ -369,7 +674,8 @@ function Produtos({ syncing, setSyncing }) {
                     <td><label className="toggle"><input type="checkbox" checked={!!p.ativo} onChange={()=>toggleAtivo(p)}/><span className="toggle-slider"/></label></td>
                     <td>
                       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                        <button className="btn btn-ghost btn-sm" onClick={()=>{setNomeEdit({id:p.id,nome:p.nome,custo:String(p.custo??''),venda:String(p.venda??'')});window.scrollTo({top:0,behavior:'smooth'});}}>✏ Editar</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>toggleDestaque(p)} title={p.destaque?'Tirar do topo':'Fixar no topo'}>{p.destaque?'⭐':'☆'}</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{setNomeEdit({id:p.id,nome:p.nome,categoria_id:p.categoria_id||'',custo:String(p.custo??''),venda:String(p.venda??'')});window.scrollTo({top:0,behavior:'smooth'});}}>✏ Editar</button>
                         <button className="btn btn-ghost btn-sm" onClick={()=>setEstoqueEdit({id:p.id,delivery:estoqueDelivery[p.id]?.qtd??0,feirinha:estoqueFeirinha[p.id]?.qtd??0})}>📦 Estoque</button>
                         <button className="btn btn-danger btn-sm" onClick={()=>excluir(p.id)}>✕</button>
                       </div>
@@ -413,7 +719,7 @@ function Vendedores({ syncing, setSyncing }) {
     const pendente = vendasVend.filter(vd => vd.status === 'pendente').reduce((a,vd) => a + vd.total, 0);
     const pago = vendasVend.filter(vd => vd.status === 'pago').reduce((a,vd) => a + vd.total, 0);
 
-    let t = `☕ *CAFÉ & TAL — Suas vendas*\n`;
+    let t = `☕ *CAFÉ & TAL - Suas vendas*\n`;
     t += `👤 *${v.nome}*\n`;
     if (filtroPeriodo.de || filtroPeriodo.ate) {
       const de = filtroPeriodo.de ? filtroPeriodo.de.split('-').reverse().join('/') : 'início';
@@ -423,7 +729,7 @@ function Vendedores({ syncing, setSyncing }) {
     t += `━━━━━━━━━━━━━━━━━━━━\n`;
     vendasVend.forEach(vd => {
       const comp = compradores.find(c => c.id === vd.comprador_id);
-      t += `\n📦 *${comp?.nome || '—'}*`;
+      t += `\n📦 *${comp?.nome || '-'}*`;
       if (comp?.cidade) t += ` (${comp.cidade})`;
       t += `\n📅 ${vd.data.split('-').reverse().join('/')}\n`;
       t += `  💰 ${fmt(vd.total)}`;
@@ -519,7 +825,7 @@ function Vendedores({ syncing, setSyncing }) {
       {resumoModal && (
         <div className="modal-bg" onClick={()=>setResumoModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-title">📲 Resumo — {resumoModal.vendedor.nome}</div>
+            <div className="modal-title">📲 Resumo - {resumoModal.vendedor.nome}</div>
             <div className="nota-preview">{resumoModal.texto}</div>
             <button className="whats-btn" onClick={()=>{
               const tel = resumoModal.vendedor.telefone?.replace(/\D/g,'');
@@ -645,9 +951,17 @@ function Vendas({ syncing, setSyncing }) {
   const { arr: vendedores } = useFirestore('vendedores');
   const { arr: compradores } = useFirestore('compradores');
   const { arr: vendas, loading } = useFirestore('vendas');
+  const { arr: categorias } = useFirestore('categorias');
+  const { arr: cidadesV } = useFirestore('cidades');
   const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
   const [tab, setTab] = useState('nova');
-  const [form, setForm] = useState({comprador_id:'',vendedor_id:'',data:hoje(),itens:[{produto_id:'',qtd:1}],obs:'',status:'pendente',desconto_tipo:'pct',desconto_valor:''});
+  const [form, setForm] = useState({comprador_id:'',vendedor_id:'',data:hoje(),itens:[],obs:'',status:'pendente',desconto_tipo:'pct',desconto_valor:''});
+  useEffect(()=>{
+    if(form.vendedor_id || !vendedores.length) return;
+    const ult = lsGet('ultimo_vendedor','');
+    const alvo = vendedores.find(v=>v.id===ult) || (vendedores.length===1?vendedores[0]:null);
+    if(alvo) setForm(f=>f.vendedor_id?f:{...f,vendedor_id:alvo.id});
+  },[vendedores]);
   const [alert, setAlert] = useState(null);
   const [notaModal, setNotaModal] = useState(null);
   const [editandoVenda, setEditandoVenda] = useState(null);
@@ -684,7 +998,9 @@ function Vendas({ syncing, setSyncing }) {
 
   async function salvar() {
     if(!form.comprador_id||!form.vendedor_id) return showAlert('danger','Selecione comprador e vendedor.');
+    if(form.itens.length===0) return showAlert('danger','Adicione ao menos um produto.');
     if(form.itens.some(it=>!it.produto_id||!it.qtd)) return showAlert('danger','Preencha todos os itens.');
+    lsSet('ultimo_vendedor', form.vendedor_id);
     setSyncing(true);
     try {
       const id = uid();
@@ -696,7 +1012,7 @@ function Vendas({ syncing, setSyncing }) {
         const atual = estoqueDelivery[it.produto_id]?.qtd||0;
         await saveDoc('estoque_delivery', it.produto_id, {qtd:Math.max(0,atual-(parseInt(it.qtd)||0))});
       }
-      setForm({comprador_id:'',vendedor_id:'',data:hoje(),itens:[{produto_id:'',qtd:1}],obs:'',status:'pendente'});
+      setForm({comprador_id:'',vendedor_id:form.vendedor_id,data:hoje(),itens:[],obs:'',status:'pendente',desconto_tipo:'pct',desconto_valor:'',entregue:false});
       showAlert('success','Venda registrada!');
       setTab('lista');
     } catch(e){ showAlert('danger','Erro ao salvar.'); }
@@ -728,7 +1044,7 @@ function Vendas({ syncing, setSyncing }) {
       comprador_id: venda.comprador_id,
       vendedor_id: venda.vendedor_id,
       data: venda.data,
-      itens: venda.itens ? [...venda.itens.map(it=>({...it}))] : [{produto_id:'',qtd:1}],
+      itens: venda.itens ? [...venda.itens.map(it=>({...it}))] : [],
       obs: venda.obs||'',
       status: venda.status,
       desconto_tipo: venda.desconto_tipo||'pct',
@@ -739,13 +1055,16 @@ function Vendas({ syncing, setSyncing }) {
 
   async function salvarEdicaoVenda() {
     if(!editandoVenda.comprador_id||!editandoVenda.vendedor_id) return showAlert('danger','Selecione comprador e vendedor.');
+    if(editandoVenda.itens.length===0) return showAlert('danger','Adicione ao menos um produto.');
     if(editandoVenda.itens.some(it=>!it.produto_id||!it.qtd)) return showAlert('danger','Preencha todos os itens.');
     setSyncing(true);
     try {
       const descValor = calcDesconto(editandoVenda.itens, editandoVenda.desconto_tipo, editandoVenda.desconto_valor);
       const total = calcTotal(editandoVenda.itens, editandoVenda.desconto_tipo, editandoVenda.desconto_valor);
       const lucro = calcLucro(editandoVenda.itens, editandoVenda.desconto_tipo, editandoVenda.desconto_valor);
+      const orig = vendas.find(v=>v.id===editandoVenda.id) || {};
       const vendaAtualizada = {
+        ...orig,
         ...editandoVenda,
         subtotal: calcSubtotal(editandoVenda.itens),
         desconto: descValor,
@@ -765,7 +1084,7 @@ function Vendas({ syncing, setSyncing }) {
     const vend = vendedores.find(v=>v.id===venda.vendedor_id);
     let t=`☕ *CAFÉ & TAL*\n━━━━━━━━━━━━━━━━━━━━\n`;
     t+=`📋 *Pedido #${venda.id.slice(0,6).toUpperCase()}*\n`;
-    t+=`📅 ${venda.data}\n`;
+    t+=`📅 ${fdata(venda.data)}\n`;
     t+=`👤 Cliente: ${comp?.nome||'-'}\n`;
     if(comp?.cidade) t+=`📍 ${comp.cidade}\n`;
     if(comp?.endereco) t+=`🏠 ${comp.endereco}\n`;
@@ -814,15 +1133,12 @@ function Vendas({ syncing, setSyncing }) {
         <div className="card">
           {alert&&<div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
           <div className="card-title">Registrar venda</div>
-          <div className="form-row cols3">
-            <div className="field"><label>Comprador</label>
-              <select value={form.comprador_id} onChange={e=>setForm(f=>({...f,comprador_id:e.target.value}))}>
-                <option value="">Selecionar...</option>
-                {compradores.map(c=><option key={c.id} value={c.id}>{c.nome} — {c.cidade}</option>)}
-              </select>
-            </div>
+          <div className="field" style={{marginBottom:10}}><label>Comprador</label>
+            <SeletorComprador compradores={compradores} cidades={cidadesV} value={form.comprador_id} onChange={id=>setForm(f=>({...f,comprador_id:id}))}/>
+          </div>
+          <div className="form-row cols2">
             <div className="field"><label>Vendedor</label>
-              <select value={form.vendedor_id} onChange={e=>setForm(f=>({...f,vendedor_id:e.target.value}))}>
+              <select value={form.vendedor_id} onChange={e=>{lsSet('ultimo_vendedor',e.target.value);setForm(f=>({...f,vendedor_id:e.target.value}));}}>
                 <option value="">Selecionar...</option>
                 {vendedores.map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}
               </select>
@@ -830,27 +1146,11 @@ function Vendas({ syncing, setSyncing }) {
             <div className="field"><label>Data</label><input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))}/></div>
           </div>
           <div className="separator"/>
-          <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS DO PEDIDO</div>
-          {form.itens.map((it,i)=>(
-            <div key={i} className="item-linha">
-              <div className="field" style={{flex:2}}>
-                {i===0&&<label>Produto</label>}
-                <select value={it.produto_id} onChange={e=>setItem(i,'produto_id',e.target.value)}>
-                  <option value="">Selecionar...</option>
-                  {prodAtivos.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}
-                </select>
-              {(()=>{const p=produtos.find(x=>x.id===it.produto_id);const stk=estoqueDelivery[p?.id]?.qtd??0;return p&&stk>0&&stk<=3?<div style={{fontSize:11,color:'var(--warning)',marginTop:2}}>{`⚠ Estoque baixo: ${stk} un`}</div>:null;})()}
-              </div>
-              <div className="field" style={{width:70}}>
-                {i===0&&<label>Qtd</label>}
-                <input type="number" min="1" value={it.qtd} onChange={e=>setItem(i,'qtd',e.target.value)}/>
-              </div>
-              <div style={{paddingBottom:2}}>
-                <button className="btn btn-ghost btn-sm" onClick={()=>removeItem(i)} disabled={form.itens.length===1}>✕</button>
-              </div>
-            </div>
-          ))}
-          <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={addItem}>+ Adicionar item</button>
+          <div className="section-label">PRODUTOS</div>
+          <SeletorProdutos produtos={produtos} categorias={categorias} estoque={estoqueDelivery} itens={form.itens} onAdd={pid=>setForm(f=>({...f,itens:addProdutoAosItens(f.itens,pid)}))}/>
+          <div className="section-label" style={{marginTop:14}}>PEDIDO</div>
+          <ListaItens itens={form.itens} produtos={produtos} estoque={estoqueDelivery} onQtd={(i,n)=>setItem(i,'qtd',String(n))} onRemover={removeItem}/>
+          <div style={{height:8}}/>
           <div className="separator"/>
           <div className="total-row"><span style={{color:'var(--text-muted)'}}>Subtotal</span><span>{fmt(calcSubtotal(form.itens))}</span></div>
           {(()=>{
@@ -913,7 +1213,7 @@ function Vendas({ syncing, setSyncing }) {
                 <div key={v.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--cream-dark)',flexWrap:'wrap',gap:8}}>
                   <div>
                     <div style={{fontWeight:700}}>{comp?.nome||'-'}</div>
-                    <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?.cidade} · {v.data}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?.cidade} · {fdata(v.data)}</div>
                     <div style={{fontSize:12,marginTop:2}}>
                       {v.itens?.map((it,i)=>{const p=produtos.find(x=>x.id===it.produto_id);return <span key={i} style={{marginRight:6}}>{p?.nome||'?'} ×{it.qtd}</span>;})}
                     </div>
@@ -937,13 +1237,10 @@ function Vendas({ syncing, setSyncing }) {
             <span>Editar venda</span>
             <button className="btn btn-ghost btn-sm" onClick={()=>{setEditandoVenda(null);setTab('lista');}}>Cancelar</button>
           </div>
-          <div className="form-row cols3">
-            <div className="field"><label>Comprador</label>
-              <select value={editandoVenda.comprador_id} onChange={e=>setEditandoVenda(v=>({...v,comprador_id:e.target.value}))}>
-                <option value="">Selecionar...</option>
-                {compradores.map(c=><option key={c.id} value={c.id}>{c.nome} — {c.cidade}</option>)}
-              </select>
-            </div>
+          <div className="field" style={{marginBottom:10}}><label>Comprador</label>
+            <SeletorComprador compradores={compradores} cidades={cidadesV} value={editandoVenda.comprador_id} onChange={id=>setEditandoVenda(v=>({...v,comprador_id:id}))}/>
+          </div>
+          <div className="form-row cols2">
             <div className="field"><label>Vendedor</label>
               <select value={editandoVenda.vendedor_id} onChange={e=>setEditandoVenda(v=>({...v,vendedor_id:e.target.value}))}>
                 <option value="">Selecionar...</option>
@@ -953,30 +1250,11 @@ function Vendas({ syncing, setSyncing }) {
             <div className="field"><label>Data</label><input type="date" value={editandoVenda.data} onChange={e=>setEditandoVenda(v=>({...v,data:e.target.value}))}/></div>
           </div>
           <div className="separator"/>
-          <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS DO PEDIDO</div>
-          {editandoVenda.itens.map((it,i)=>(
-            <div key={i} className="item-linha">
-              <div className="field" style={{flex:2}}>
-                {i===0&&<label>Produto</label>}
-                <select value={it.produto_id} onChange={e=>setEditandoVenda(v=>({...v,itens:v.itens.map((x,idx)=>idx===i?{...x,produto_id:e.target.value}:x)}))}>
-                  <option value="">Selecionar...</option>
-                  {prodAtivos.map(p=>{
-                    const stk=estoqueFeirinha[p.id]?.qtd??0;
-                    return <option key={p.id} value={p.id}>{p.nome}{stk>0?` (${stk})`:''}</option>;
-                  })}
-                </select>
-                {(()=>{const p=produtos.find(x=>x.id===it.produto_id);const stk=estoqueFeirinha[p?.id]?.qtd??0;return p&&stk>0&&stk<=3?<div style={{fontSize:11,color:'var(--warning)',marginTop:2}}>{`⚠ Estoque baixo: ${stk} un`}</div>:null;})()}
-              </div>
-              <div className="field" style={{width:70}}>
-                {i===0&&<label>Qtd</label>}
-                <input type="number" min="1" value={it.qtd} onChange={e=>setEditandoVenda(v=>({...v,itens:v.itens.map((x,idx)=>idx===i?{...x,qtd:e.target.value}:x)}))}/>
-              </div>
-              <div style={{paddingBottom:2}}>
-                <button className="btn btn-ghost btn-sm" onClick={()=>setEditandoVenda(v=>({...v,itens:v.itens.filter((_,idx)=>idx!==i)}))} disabled={editandoVenda.itens.length===1}>✕</button>
-              </div>
-            </div>
-          ))}
-          <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={()=>setEditandoVenda(v=>({...v,itens:[...v.itens,{produto_id:'',qtd:1}]}))}>+ Adicionar item</button>
+          <div className="section-label">PRODUTOS</div>
+          <SeletorProdutos produtos={produtos} categorias={categorias} estoque={estoqueDelivery} itens={editandoVenda.itens} onAdd={pid=>setEditandoVenda(v=>({...v,itens:addProdutoAosItens(v.itens,pid)}))}/>
+          <div className="section-label" style={{marginTop:14}}>PEDIDO</div>
+          <ListaItens itens={editandoVenda.itens} produtos={produtos} estoque={estoqueDelivery} onQtd={(i,n)=>setEditandoVenda(v=>({...v,itens:v.itens.map((x,idx)=>idx===i?{...x,qtd:String(n)}:x)}))} onRemover={(i)=>setEditandoVenda(v=>({...v,itens:v.itens.filter((_,idx)=>idx!==i)}))}/>
+          <div style={{height:8}}/>
           <div className="separator"/>
           <div className="total-row"><span style={{color:'var(--text-muted)'}}>Subtotal</span><span>{fmt(calcSubtotal(editandoVenda.itens))}</span></div>
           {(()=>{
@@ -1041,7 +1319,7 @@ function Vendas({ syncing, setSyncing }) {
                   const vend=vendedores.find(x=>x.id===v.vendedor_id);
                   return (
                     <tr key={v.id}>
-                      <td style={{color:'var(--text-muted)'}}>{v.data}</td>
+                      <td style={{color:'var(--text-muted)'}}>{fdata(v.data)}</td>
                       <td style={{fontWeight:600}}>{comp?.nome||'-'}</td>
                       <td style={{color:'var(--text-muted)'}}>{vend?.nome||'-'}</td>
                       <td style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</td>
@@ -1079,7 +1357,7 @@ function Vendas({ syncing, setSyncing }) {
                 <div key={v.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--cream-dark)',flexWrap:'wrap',gap:8}}>
                   <div>
                     <div style={{fontWeight:700}}>{comp?.nome||'-'}</div>
-                    <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?.cidade} • {v.data}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?.cidade} • {fdata(v.data)}</div>
                   </div>
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
                     <span style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</span>
@@ -1120,11 +1398,12 @@ function Feirinha({ syncing, setSyncing }) {
   const { arr: feirinha, loading } = useFirestore('feirinha');
   const { docs: estoqueFeirinha } = useFirestore('estoque_feirinha');
   const { arr: participacoes } = useFirestore('participacoes');
+  const { arr: categorias } = useFirestore('categorias');
   const [tab, setTab] = useState('nova');
-  const [form, setForm] = useState({itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
+  const [form, setForm] = useState({itens:[]});
   const [alert, setAlert] = useState(null);
 
-  // Sessão ativa — persiste no localStorage
+  // Sessão ativa - persiste no localStorage
   const [sessaoId, setSessaoId] = useState(() => localStorage.getItem('feirinha_sessao') || '');
 
   const sessaoAtiva = useMemo(() =>
@@ -1151,6 +1430,14 @@ function Feirinha({ syncing, setSyncing }) {
   function addItem(){setForm(f=>({...f,itens:[...f.itens,{produto_id:'',qtd:1,preco_unitario:''}]}));}
   function removeItem(i){setForm(f=>({...f,itens:f.itens.filter((_,idx)=>idx!==i)}));}
 
+  function addProdutoFeira(pid){
+    const p=produtos.find(x=>x.id===pid);
+    setForm(f=>{
+      let itens=addProdutoAosItens(f.itens,pid);
+      itens=itens.map(it=>(it.produto_id===pid&&(it.preco_unitario===''||it.preco_unitario===undefined))?{...it,preco_unitario:p?p.venda:''}:it);
+      return {...f,itens:itens};
+    });
+  }
   function autoPreco(i,pid){
     const p=produtos.find(x=>x.id===pid);
     setForm(f=>({...f,itens:f.itens.map((it,idx)=>idx===i?{...it,produto_id:pid,preco_unitario:p?p.venda:''}:it)}));
@@ -1166,6 +1453,7 @@ function Feirinha({ syncing, setSyncing }) {
 
   async function salvar() {
     if(!sessaoAtiva) return showAlert('danger','Abra uma sessão de feira antes de registrar vendas.');
+    if(form.itens.length===0) return showAlert('danger','Adicione ao menos um produto.');
     if(form.itens.some(it=>!it.produto_id||!it.qtd||!it.preco_unitario)) return showAlert('danger','Preencha todos os itens.');
     setSyncing(true);
     try {
@@ -1184,7 +1472,7 @@ function Feirinha({ syncing, setSyncing }) {
         const atual=estoqueFeirinha[it.produto_id]?.qtd||0;
         await saveDoc('estoque_feirinha',it.produto_id,{qtd:Math.max(0,atual-(parseInt(it.qtd)||0))});
       }
-      setForm({itens:[{produto_id:'',qtd:1,preco_unitario:''}]});
+      setForm({itens:[]});
       showAlert('success','Venda registrada!');
     } catch(e){showAlert('danger','Erro ao salvar.');}
     setSyncing(false);
@@ -1268,34 +1556,11 @@ function Feirinha({ syncing, setSyncing }) {
           {alert&&<div className={`alert alert-${alert.tipo}`}>{alert.msg}</div>}
           <div className="card-title">Venda na feira</div>
           {!sessaoAtiva && <div className="alert alert-danger">Abra uma sessão primeiro para registrar vendas.</div>}
-          <div style={{marginBottom:8,fontWeight:700,fontSize:13,color:'var(--text-muted)'}}>ITENS VENDIDOS</div>
-          {form.itens.map((it,i)=>(
-            <div key={i} className="item-linha">
-              <div className="field" style={{flex:2}}>
-                {i===0&&<label>Produto</label>}
-                <select value={it.produto_id} onChange={e=>autoPreco(i,e.target.value)}>
-                  <option value="">Selecionar...</option>
-                  {prodAtivos.map(p=>{
-                    const stk=estoqueFeirinha[p.id]?.qtd??0;
-                    return <option key={p.id} value={p.id}>{p.nome}{stk>0?` (${stk})`:''}</option>;
-                  })}
-                </select>
-                {(()=>{const p=produtos.find(x=>x.id===it.produto_id);const stk=estoqueFeirinha[p?.id]?.qtd??0;return p&&stk>0&&stk<=3?<div style={{fontSize:11,color:'var(--warning)',marginTop:2}}>{`⚠ Estoque baixo: ${stk} un`}</div>:null;})()}
-              </div>
-              <div className="field" style={{width:70}}>
-                {i===0&&<label>Qtd</label>}
-                <input type="number" min="1" value={it.qtd} onChange={e=>setItem(i,'qtd',e.target.value)}/>
-              </div>
-              <div className="field" style={{width:100}}>
-                {i===0&&<label>Preço unit.</label>}
-                <input type="number" step="0.01" value={it.preco_unitario} onChange={e=>setItem(i,'preco_unitario',e.target.value)} placeholder="0,00"/>
-              </div>
-              <div style={{paddingBottom:2}}>
-                <button className="btn btn-ghost btn-sm" onClick={()=>removeItem(i)} disabled={form.itens.length===1}>✕</button>
-              </div>
-            </div>
-          ))}
-          <button className="btn btn-ghost btn-sm" style={{marginBottom:12}} onClick={addItem}>+ Adicionar item</button>
+          <div className="section-label">PRODUTOS</div>
+          <SeletorProdutos produtos={produtos} categorias={categorias} estoque={estoqueFeirinha} itens={form.itens} onAdd={addProdutoFeira}/>
+          <div className="section-label" style={{marginTop:14}}>VENDA</div>
+          <ListaItens itens={form.itens} produtos={produtos} estoque={estoqueFeirinha} onQtd={(i,n)=>setItem(i,'qtd',String(n))} onRemover={removeItem} onPreco={(i,v)=>setItem(i,'preco_unitario',v)}/>
+          <div style={{height:8}}/>
           <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens))}</span></div>
           <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Lucro estimado (vendas)</span><span style={{color:'var(--success)',fontSize:13,fontWeight:600}}>{fmt(calcLucro(form.itens))}</span></div>
           <div className="separator"/>
@@ -1339,7 +1604,7 @@ function Feirinha({ syncing, setSyncing }) {
                   {vs.map(v=>(
                     <div key={v.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0 4px 12px',borderLeft:'2px solid var(--cream-dark)',marginBottom:4,flexWrap:'wrap',gap:4}}>
                       <div style={{fontSize:12}}>
-                        <span style={{color:'var(--text-muted)'}}>{v.data}</span>
+                        <span style={{color:'var(--text-muted)'}}>{fdata(v.data)}</span>
                         <span style={{marginLeft:8}}>
                           {v.itens?.map((it,i)=>{const p=produtos.find(x=>x.id===it.produto_id);return <span key={i} style={{marginRight:6}}>{p?.nome||'?'} ×{it.qtd}</span>;})}
                         </span>
@@ -1385,7 +1650,7 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
     const feiraObj = feirasCadastro.find(f => f.id === feiraId);
     const fairaNome = feiraObj?.nome || '';
 
-    // Vendas filtradas — inclui dados novos (por participacao_id) e legados (por feira_nome)
+    // Vendas filtradas - inclui dados novos (por participacao_id) e legados (por feira_nome)
     const vendasFiltradas = feirinha.filter(v => {
       if (partId) return v.participacao_id === partId;
       if (partIds.has(v.participacao_id)) return true;
@@ -1445,7 +1710,7 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
     if (feira) t += `*${feira.nome}*\n`;
     t += `━━━━━━━━━━━━━━━━━━━━\n`;
     t += `📦 *O que foi vendido:*\n`;
-    resultado.itens.forEach(it => { t += `• ${it.nome}: ${it.qtd} un — ${fmt(it.total)}\n`; });
+    resultado.itens.forEach(it => { t += `• ${it.nome}: ${it.qtd} un - ${fmt(it.total)}\n`; });
     t += `━━━━━━━━━━━━━━━━━━━━\n`;
     t += `💰 Faturamento: ${fmt(resultado.totalVendas)}\n`;
     if (resultado.totalInscricoes > 0) t += `📋 Inscrição(ões): − ${fmt(resultado.totalInscricoes)}\n`;
@@ -1518,7 +1783,7 @@ function RelatorioFeira({ feirinha, participacoes, feirasCadastro, produtos }) {
               if(resultado.porPart.length>1){
                 html += `<div class="section"><div class="section-title">Comparativo por participação</div><table><thead><tr><th>Período</th><th>Registros</th><th>Faturamento</th><th>Inscrição</th><th>Lucro líquido</th></tr></thead><tbody>`;
                 resultado.porPart.forEach(p=>{
-                  html += `<tr><td><strong>${p.label}</strong></td><td>${p.qtd}</td><td>${fmt(p.total)}</td><td>${p.inscricao>0?'−'+fmt(p.inscricao):'—'}</td><td><strong>${fmt(p.lucro)}</strong></td></tr>`;
+                  html += `<tr><td><strong>${p.label}</strong></td><td>${p.qtd}</td><td>${fmt(p.total)}</td><td>${p.inscricao>0?'−'+fmt(p.inscricao):'-'}</td><td><strong>${fmt(p.lucro)}</strong></td></tr>`;
                 });
                 html += `</tbody></table></div>`;
               }
@@ -1596,7 +1861,7 @@ function Relatorio() {
     const ff = feirinha.filter(f=>{
       if(canalEfetivo==='delivery') return false;
       if(feira_id){
-        // filtro de feira sobrepõe datas — busca por participacao_id ou feira_nome (legado)
+        // filtro de feira sobrepõe datas - busca por participacao_id ou feira_nome (legado)
         const part = participacoes.find(p=>p.id===f.participacao_id);
         if(part) {
           if(part.feira_id !== feira_id) return false;
@@ -2082,24 +2347,24 @@ function Dashboard({ syncing, setSyncing }) {
           {modo==='mesSel'&&(
             <div className="field" style={{margin:0}}>
               <label>Mês</label>
-              <input type="month" value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{padding:'6px 8px',fontSize:13}}/>
+              <input type="month" value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{padding:'6px 8px'}}/>
             </div>
           )}
           {modo==='custom'&&(
             <>
               <div className="field" style={{margin:0}}>
                 <label>De</label>
-                <input type="date" value={custom.de} onChange={e=>setCustom(c=>({...c,de:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
+                <input type="date" value={custom.de} onChange={e=>setCustom(c=>({...c,de:e.target.value}))} style={{padding:'6px 8px'}}/>
               </div>
               <div className="field" style={{margin:0}}>
                 <label>Até</label>
-                <input type="date" value={custom.ate} onChange={e=>setCustom(c=>({...c,ate:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
+                <input type="date" value={custom.ate} onChange={e=>setCustom(c=>({...c,ate:e.target.value}))} style={{padding:'6px 8px'}}/>
               </div>
             </>
           )}
           <div className="field" style={{margin:0}}>
             <label>Feira / Participação</label>
-            <select value={partSel} onChange={e=>setPartSel(e.target.value)} style={{padding:'6px 8px',fontSize:13}}>
+            <select value={partSel} onChange={e=>setPartSel(e.target.value)} style={{padding:'6px 8px'}}>
               <option value="">Todas</option>
               {[...participacoes].sort((a,b)=>b.data_inicio.localeCompare(a.data_inicio)).map(p=>{
                 const ini=p.data_inicio?.split('-').reverse().join('/');
@@ -2176,8 +2441,8 @@ function Dashboard({ syncing, setSyncing }) {
             <table>
               <thead><tr><th>Produto</th><th>Margem</th><th>Stk Delivery</th><th>Stk Feirinha</th><th>Status</th></tr></thead>
               <tbody>
-                {produtos.map(p=>{
-                  const margem=p.custo>0?((p.venda-p.custo)/p.venda*100).toFixed(1)+'%':'—';
+                {[...produtos].sort((a,b)=>(a.ativo===b.ativo?0:(a.ativo?-1:1))||a.nome.localeCompare(b.nome)).map(p=>{
+                  const margem=p.custo>0?((p.venda-p.custo)/p.venda*100).toFixed(1)+'%':'-';
                   const edQtd=estoqueDelivery[p.id]?.qtd??0;
                   const efQtd=estoqueFeirinha[p.id]?.qtd??0;
                   return (
@@ -2709,7 +2974,7 @@ function Producao() {
 
   function textoWhats() {
     if (!resultado) return '';
-    let t = `📦 *LISTA DE PRODUÇÃO — ${filtro.cidade.toUpperCase()}*\n`;
+    let t = `📦 *LISTA DE PRODUÇÃO - ${filtro.cidade.toUpperCase()}*\n`;
     t += `📅 ${filtro.de.split('-').reverse().join('/')} a ${filtro.ate.split('-').reverse().join('/')}\n`;
     t += `━━━━━━━━━━━━━━━━━━━━\n`;
     resultado.itens.forEach(it => { t += `• ${it.nome}: *${it.qtd} un*\n`; });
@@ -2798,7 +3063,7 @@ function Producao() {
             {filtro.cidade} · {resultado.vendas.length} pedido{resultado.vendas.length!==1?'s':''} · {filtro.de.split('-').reverse().join('/')} a {filtro.ate.split('-').reverse().join('/')}
           </div>
 
-          {/* Lista de produção — limpa e direta */}
+          {/* Lista de produção - limpa e direta */}
           <div className="card" style={{borderLeft:'4px solid var(--wine)'}}>
             <div className="card-title">O que produzir</div>
             <div style={{display:'flex',flexDirection:'column',gap:2}}>
@@ -2882,7 +3147,7 @@ function imprimirRelatorio(titulo, subtitulo, conteudoHTML) {
     }
   `;
 
-  const htmlContent = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + titulo + ' — Café & Tal</title>'
+  const htmlContent = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + titulo + ' - Café & Tal</title>'
     + '<style>' + estilos + '</style></head><body>'
     + '<div class="header">'
     + '<div class="header-left"><div class="client">Café &amp; Tal</div><div class="report-title">' + cabecalho + '</div></div>'
@@ -2925,7 +3190,8 @@ function InstallButton() {
 // ── APP ROOT ──────────────────────────────────────────────────────
 function App() {
   const [ready, setReady] = useState(!!window._firebaseReady);
-  const [page, setPage] = useState('dashboard');
+  const [page, setPageState] = useState(()=>lsGet('pagina','dashboard'));
+  function setPage(id){ setPageState(id); lsSet('pagina',id); window.scrollTo(0,0); }
   const [syncing, setSyncing] = useState(false);
 
   useEffect(()=>{

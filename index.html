@@ -259,10 +259,13 @@ function Produtos({ syncing, setSyncing }) {
 
   async function salvarNome() {
     if(!nomeEdit.nome.trim()) return;
+    const venda = parseFloat(nomeEdit.venda);
+    if(isNaN(venda) || venda < 0) return showAlert('danger','Informe um preço de venda válido.');
     setSyncing(true);
     const p = produtos.find(x=>x.id===nomeEdit.id);
-    await saveDoc('produtos', nomeEdit.id, {...p, nome:nomeEdit.nome.trim()});
+    await saveDoc('produtos', nomeEdit.id, {...p, nome:nomeEdit.nome.trim(), custo:parseFloat(nomeEdit.custo)||0, venda:venda});
     setNomeEdit(null);
+    showAlert('success','Produto atualizado! Vendas já feitas continuam com os valores da época.');
     setSyncing(false);
   }
 
@@ -319,12 +322,15 @@ function Produtos({ syncing, setSyncing }) {
 
       {nomeEdit && (
         <div className="card" style={{borderColor:'var(--gold)'}}>
-          <div className="card-title">Editar nome do produto</div>
-          <div className="form-row">
+          <div className="card-title">Editar produto</div>
+          <div className="form-row cols3">
             <div className="field"><label>Nome</label><input value={nomeEdit.nome} onChange={e=>setNomeEdit(n=>({...n,nome:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&salvarNome()}/></div>
+            <div className="field"><label>Custo (R$)</label><input type="number" step="0.01" value={nomeEdit.custo} onChange={e=>setNomeEdit(n=>({...n,custo:e.target.value}))}/></div>
+            <div className="field"><label>Venda (R$)</label><input type="number" step="0.01" value={nomeEdit.venda} onChange={e=>setNomeEdit(n=>({...n,venda:e.target.value}))}/></div>
           </div>
+          <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:10}}>Novos valores valem para as próximas vendas. Vendas já registradas não mudam.</div>
           <div style={{display:'flex',gap:8}}>
-            <button className="btn btn-gold" onClick={salvarNome} disabled={syncing}>Salvar nome</button>
+            <button className="btn btn-gold" onClick={salvarNome} disabled={syncing}>Salvar alterações</button>
             <button className="btn btn-ghost" onClick={()=>setNomeEdit(null)}>Cancelar</button>
           </div>
         </div>
@@ -363,7 +369,7 @@ function Produtos({ syncing, setSyncing }) {
                     <td><label className="toggle"><input type="checkbox" checked={!!p.ativo} onChange={()=>toggleAtivo(p)}/><span className="toggle-slider"/></label></td>
                     <td>
                       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                        <button className="btn btn-ghost btn-sm" onClick={()=>setNomeEdit({id:p.id,nome:p.nome})}>✏ Nome</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{setNomeEdit({id:p.id,nome:p.nome,custo:String(p.custo??''),venda:String(p.venda??'')});window.scrollTo({top:0,behavior:'smooth'});}}>✏ Editar</button>
                         <button className="btn btn-ghost btn-sm" onClick={()=>setEstoqueEdit({id:p.id,delivery:estoqueDelivery[p.id]?.qtd??0,feirinha:estoqueFeirinha[p.id]?.qtd??0})}>📦 Estoque</button>
                         <button className="btn btn-danger btn-sm" onClick={()=>excluir(p.id)}>✕</button>
                       </div>
@@ -1927,23 +1933,79 @@ function Dashboard({ syncing, setSyncing }) {
   const { arr: vendedores } = useFirestore('vendedores');
   const [recalcInfo, setRecalcInfo] = useState(null);
   const [recalcDone, setRecalcDone] = useState(false);
-  const [periodo, setPeriodo] = useState({de:'',ate:''});
-  const [filtroAtivo, setFiltroAtivo] = useState(false);
+  const [modo, setModo] = useState('mes');
+  const [mesSel, setMesSel] = useState(hoje().slice(0,7));
+  const [custom, setCustom] = useState({de:'',ate:''});
+  const [partSel, setPartSel] = useState('');
+
+  const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function addMeses(ym,n){ const a=ym.split('-').map(Number); const d=new Date(a[0],a[1]-1+n,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  function rangeMes(ym){ const a=ym.split('-').map(Number); return {de:ymd(new Date(a[0],a[1]-1,1)), ate:ymd(new Date(a[0],a[1],0))}; }
+  function rotMes(ym){ const a=ym.split('-'); return MESES[parseInt(a[1])-1]+' de '+a[0]; }
+  function dbr(d){ return d? d.split('-').reverse().join('/') : ''; }
+
+  // Faixa atual e anterior (para comparação)
+  const faixa = (()=>{
+    const agora = new Date();
+    const mesAtual = ymd(agora).slice(0,7);
+    if(modo==='mes') return {...rangeMes(mesAtual), rotulo:rotMes(mesAtual), ant:rangeMes(addMeses(mesAtual,-1)), rotAnt:'mês anterior'};
+    if(modo==='mesAnt'){ const m=addMeses(mesAtual,-1); return {...rangeMes(m), rotulo:rotMes(m), ant:rangeMes(addMeses(m,-1)), rotAnt:'mês anterior'}; }
+    if(modo==='mesSel'){ const m=mesSel||mesAtual; return {...rangeMes(m), rotulo:rotMes(m), ant:rangeMes(addMeses(m,-1)), rotAnt:'mês anterior'}; }
+    if(modo==='30d'){
+      const fim=new Date(agora.getFullYear(),agora.getMonth(),agora.getDate());
+      const ini=new Date(fim); ini.setDate(ini.getDate()-29);
+      const fimA=new Date(ini); fimA.setDate(fimA.getDate()-1);
+      const iniA=new Date(fimA); iniA.setDate(iniA.getDate()-29);
+      return {de:ymd(ini), ate:ymd(fim), rotulo:'Últimos 30 dias ('+dbr(ymd(ini))+' a '+dbr(ymd(fim))+')', ant:{de:ymd(iniA),ate:ymd(fimA)}, rotAnt:'30 dias anteriores'};
+    }
+    if(modo==='custom'){
+      let ant=null;
+      if(custom.de&&custom.ate&&custom.ate>=custom.de){
+        const a=new Date(custom.de+'T00:00:00'), b=new Date(custom.ate+'T00:00:00');
+        const dias=Math.round((b-a)/86400000)+1;
+        const fimA=new Date(a); fimA.setDate(fimA.getDate()-1);
+        const iniA=new Date(fimA); iniA.setDate(iniA.getDate()-(dias-1));
+        ant={de:ymd(iniA),ate:ymd(fimA)};
+      }
+      const r=(custom.de||custom.ate)?(dbr(custom.de)||'início')+' a '+(dbr(custom.ate)||'hoje'):'Personalizado';
+      return {de:custom.de, ate:custom.ate, rotulo:r, ant:ant, rotAnt:'período anterior'};
+    }
+    return {de:'', ate:'', rotulo:'Todo o período', ant:null, rotAnt:''};
+  })();
+
+  function resumo(r, usarPart){
+    const dentro = (d)=> !( (r.de&&d<r.de) || (r.ate&&d>r.ate) );
+    let vd, fe;
+    if(usarPart && partSel){
+      vd = [];
+      fe = feirinha.filter(f=>f.participacao_id===partSel);
+    } else {
+      vd = vendas.filter(v=>dentro(v.data));
+      fe = feirinha.filter(f=>dentro(f.data));
+    }
+    const contadas = new Set();
+    let insc = 0;
+    fe.forEach(f=>{
+      if(f.participacao_id && !contadas.has(f.participacao_id)){
+        contadas.add(f.participacao_id);
+        const part = participacoes.find(x=>x.id===f.participacao_id);
+        insc += (part&&part.inscricao)||0;
+      }
+    });
+    const totalVendas = vd.reduce((a,v)=>a+(v.total||0),0);
+    const totalFeiras = fe.reduce((a,f)=>a+(f.total||0),0);
+    const lucroDelivery = vd.reduce((a,v)=>a+(v.lucro||0),0);
+    const lucroFeiras = Math.max(0, fe.reduce((a,f)=>a+(f.lucro||0),0) - insc);
+    const pend = vd.filter(v=>v.status==='pendente');
+    return {vd:vd, fe:fe, totalVendas:totalVendas, totalFeiras:totalFeiras, total:totalVendas+totalFeiras, lucro:lucroDelivery+lucroFeiras, pendentes:pend.reduce((a,v)=>a+(v.total||0),0), pendentesQtd:pend.length};
+  }
 
   // Detectar vendas com lucro desatualizado (sem desconto aplicado)
   const vendasDesatualizadas = useMemo(() => {
     if (!produtos.length || !vendas.length) return [];
     return vendas.filter(v => {
-      // Tem desconto mas lucro não foi recalculado com ele
-      if (v.desconto > 0 && v.lucro !== undefined) {
-        const lucroBase = (v.itens||[]).reduce((acc, it) => {
-          const p = produtos.find(x => x.id === it.produto_id);
-          return acc + (p ? (p.venda - p.custo) * (parseInt(it.qtd)||0) : 0);
-        }, 0);
-        const lucroEsperado = Math.max(0, lucroBase - v.desconto);
-        return Math.abs((v.lucro||0) - lucroEsperado) > 0.01;
-      }
-      // Não tem campo lucro salvo
+      // Só sinaliza vendas sem lucro salvo (preços editados depois não afetam o histórico)
       if (v.lucro === undefined || v.lucro === null) return true;
       return false;
     });
@@ -1973,53 +2035,29 @@ function Dashboard({ syncing, setSyncing }) {
     setTimeout(() => setRecalcInfo(null), 4000);
   }
 
-  const vendasFiltradas = useMemo(()=>{
-    if(!filtroAtivo) return vendas;
-    // Se filtro de feira/participação ativo, não mostrar delivery (seria confuso)
-    if(periodo.participacao_id) return [];
-    return vendas.filter(v=>{
-      if(periodo.de&&v.data<periodo.de) return false;
-      if(periodo.ate&&v.data>periodo.ate) return false;
-      return true;
-    });
-  },[vendas,periodo,filtroAtivo]);
-  const feirasFiltradas = useMemo(()=>{
-    if(!filtroAtivo) return feirinha;
-    // Se participação selecionada, sobrepõe filtro de data
-    if(periodo.participacao_id){
-      return feirinha.filter(f=>f.participacao_id===periodo.participacao_id);
-    }
-    return feirinha.filter(f=>{
-      if(periodo.de&&f.data<periodo.de) return false;
-      if(periodo.ate&&f.data>periodo.ate) return false;
-      return true;
-    });
-  },[feirinha,periodo,filtroAtivo,participacoes]);
+  const atual = resumo(faixa, true);
+  const anterior = (!partSel && faixa.ant) ? resumo(faixa.ant, false) : null;
+  const vendasFiltradas = atual.vd;
+  const feirasFiltradas = atual.fe;
+  const totalVendas = atual.totalVendas;
+  const totalFeiras = atual.totalFeiras;
+  const totalGeral = atual.total;
+  const totalLucro = atual.lucro;
+  const pendentes = atual.pendentes;
+  const pendentesQtd = atual.pendentesQtd;
 
-  const totalVendas=vendasFiltradas.reduce((a,v)=>a+v.total,0);
-  const lucroDelivery=vendasFiltradas.reduce((a,v)=>a+(v.lucro||0),0);
-  const totalFeiras=feirasFiltradas.reduce((a,f)=>a+f.total,0);
-  const lucroFeirasBase=feirasFiltradas.reduce((a,f)=>a+(f.lucro||0),0);
-  const partContadas=new Set();
-  const totalInscricoesDash=feirasFiltradas.reduce((a,f)=>{
-    if(f.participacao_id&&!partContadas.has(f.participacao_id)){
-      partContadas.add(f.participacao_id);
-      const part=participacoes.find(p=>p.id===f.participacao_id);
-      return a+(part?.inscricao||0);
-    }
-    return a;
-  },0);
-  const lucroFeiras=Math.max(0,lucroFeirasBase-totalInscricoesDash);
-  const totalGeral=totalVendas+totalFeiras;
-  const totalLucro=lucroDelivery+lucroFeiras;
-  const pendentes=vendasFiltradas.filter(v=>v.status==='pendente').reduce((a,v)=>a+v.total,0);
-  const pendentesQtd=vendasFiltradas.filter(v=>v.status==='pendente').length;
+  function delta(a,b){
+    if(!anterior) return null;
+    if(!b) return <span style={{color:'var(--text-muted)'}}>sem dados no {faixa.rotAnt}</span>;
+    const v=((a-b)/b)*100;
+    const cor=v>=0?'var(--success)':'var(--danger)';
+    return <span style={{color:cor,fontWeight:600}}>{v>=0?'▲ +':'▼ '}{v.toFixed(0)}%</span>;
+  }
 
-  const rankVendedores=vendedores.map(v=>({
-    nome:v.nome,
-    qtd:vendas.filter(vd=>vd.vendedor_id===v.id).length,
-    total:vendas.filter(vd=>vd.vendedor_id===v.id).reduce((a,vd)=>a+vd.total,0),
-  })).filter(v=>v.qtd>0).sort((a,b)=>b.total-a.total);
+  const rankVendedores=vendedores.map(v=>{
+    const lista=vendasFiltradas.filter(vd=>vd.vendedor_id===v.id);
+    return {nome:v.nome, qtd:lista.length, total:lista.reduce((a,vd)=>a+(vd.total||0),0)};
+  }).filter(v=>v.qtd>0).sort((a,b)=>b.total-a.total);
 
   const prodMaisVendido=(()=>{
     const c={};
@@ -2035,18 +2073,33 @@ function Dashboard({ syncing, setSyncing }) {
     <div>
       <div className="page-title">📊 Painel geral</div>
       <div className="card" style={{marginBottom:12,padding:'0.75rem 1.25rem'}}>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+          {[['mes','Este mês'],['mesAnt','Mês anterior'],['30d','Últimos 30 dias'],['mesSel','Escolher mês'],['custom','Personalizado'],['tudo','Tudo']].map(o=>(
+            <button key={o[0]} className={'btn btn-sm '+(modo===o[0]?'btn-primary':'btn-ghost')} onClick={()=>setModo(o[0])}>{o[1]}</button>
+          ))}
+        </div>
         <div style={{display:'flex',alignItems:'flex-end',gap:8,flexWrap:'wrap'}}>
-          <div className="field" style={{margin:0}}>
-            <label>De</label>
-            <input type="date" value={periodo.de} onChange={e=>setPeriodo(p=>({...p,de:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
-          </div>
-          <div className="field" style={{margin:0}}>
-            <label>Até</label>
-            <input type="date" value={periodo.ate} onChange={e=>setPeriodo(p=>({...p,ate:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
-          </div>
+          {modo==='mesSel'&&(
+            <div className="field" style={{margin:0}}>
+              <label>Mês</label>
+              <input type="month" value={mesSel} onChange={e=>setMesSel(e.target.value)} style={{padding:'6px 8px',fontSize:13}}/>
+            </div>
+          )}
+          {modo==='custom'&&(
+            <>
+              <div className="field" style={{margin:0}}>
+                <label>De</label>
+                <input type="date" value={custom.de} onChange={e=>setCustom(c=>({...c,de:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
+              </div>
+              <div className="field" style={{margin:0}}>
+                <label>Até</label>
+                <input type="date" value={custom.ate} onChange={e=>setCustom(c=>({...c,ate:e.target.value}))} style={{padding:'6px 8px',fontSize:13}}/>
+              </div>
+            </>
+          )}
           <div className="field" style={{margin:0}}>
             <label>Feira / Participação</label>
-            <select value={periodo.participacao_id||''} onChange={e=>setPeriodo(p=>({...p,participacao_id:e.target.value,feira_id:''}))} style={{padding:'6px 8px',fontSize:13}}>
+            <select value={partSel} onChange={e=>setPartSel(e.target.value)} style={{padding:'6px 8px',fontSize:13}}>
               <option value="">Todas</option>
               {[...participacoes].sort((a,b)=>b.data_inicio.localeCompare(a.data_inicio)).map(p=>{
                 const ini=p.data_inicio?.split('-').reverse().join('/');
@@ -2055,11 +2108,10 @@ function Dashboard({ syncing, setSyncing }) {
               })}
             </select>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={()=>setFiltroAtivo(true)} style={{marginBottom:1}}>Filtrar</button>
-          {filtroAtivo&&<button className="btn btn-ghost btn-sm" onClick={()=>{setFiltroAtivo(false);setPeriodo({de:'',ate:'',participacao_id:'',feira_id:''});}} style={{marginBottom:1}}>Ver tudo</button>}
-          {filtroAtivo&&<span style={{fontSize:12,color:'var(--text-muted)',alignSelf:'center'}}>
-            {periodo.de&&periodo.ate ? `${periodo.de.split('-').reverse().join('/')} a ${periodo.ate.split('-').reverse().join('/')}` : 'Período filtrado'}
-          </span>}
+        </div>
+        <div style={{fontSize:13,color:'var(--text-muted)',marginTop:8}}>
+          Exibindo: <b style={{color:'var(--wine)',textTransform:'capitalize'}}>{partSel ? 'Feira selecionada (só feirinha)' : faixa.rotulo}</b>
+          {anterior && <span> · comparando com {faixa.rotAnt}</span>}
         </div>
       </div>
 
@@ -2083,11 +2135,11 @@ function Dashboard({ syncing, setSyncing }) {
       )}
 
       <div className="metric-grid">
-        <div className="metric"><div className="metric-label">Faturamento total</div><div className="metric-value">{fmt(totalGeral)}</div><div className="metric-sub">delivery + feirinha</div></div>
-        <div className="metric"><div className="metric-label">Lucro real</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(totalLucro)}</div><div className="metric-sub">descontado custo</div></div>
+        <div className="metric"><div className="metric-label">Faturamento</div><div className="metric-value">{fmt(totalGeral)}</div><div className="metric-sub">{delta(totalGeral,anterior&&anterior.total)||'delivery + feirinha'}</div></div>
+        <div className="metric"><div className="metric-label">Lucro real</div><div className="metric-value" style={{color:'var(--success)'}}>{fmt(totalLucro)}</div><div className="metric-sub">{delta(totalLucro,anterior&&anterior.lucro)||'descontado custo'}</div></div>
         <div className="metric"><div className="metric-label">A receber</div><div className="metric-value" style={{color:pendentesQtd>0?'var(--warning)':'var(--success)'}}>{fmt(pendentes)}</div><div className="metric-sub">{pendentesQtd} pendente{pendentesQtd!==1?'s':''}</div></div>
-        <div className="metric"><div className="metric-label">Vendas delivery</div><div className="metric-value">{vendas.length}</div><div className="metric-sub">{fmt(totalVendas)}</div></div>
-        <div className="metric"><div className="metric-label">Vendas feirinha</div><div className="metric-value">{feirinha.length}</div><div className="metric-sub">{fmt(totalFeiras)}</div></div>
+        <div className="metric"><div className="metric-label">Vendas delivery</div><div className="metric-value">{vendasFiltradas.length}</div><div className="metric-sub">{fmt(totalVendas)}</div></div>
+        <div className="metric"><div className="metric-label">Vendas feirinha</div><div className="metric-value">{feirasFiltradas.length}</div><div className="metric-sub">{fmt(totalFeiras)}</div></div>
         <div className="metric"><div className="metric-label">Produtos ativos</div><div className="metric-value">{produtos.filter(p=>p.ativo).length}</div><div className="metric-sub">de {produtos.length} cadastrados</div></div>
       </div>
 
@@ -2095,7 +2147,7 @@ function Dashboard({ syncing, setSyncing }) {
         <div className="card" style={{borderLeft:'4px solid var(--gold)'}}>
           <div style={{fontWeight:700,color:'var(--wine)',marginBottom:2}}>⭐ Produto mais vendido</div>
           <div style={{fontSize:16,fontWeight:600}}>{prodMaisVendido.nome}</div>
-          <div style={{fontSize:13,color:'var(--text-muted)'}}>{prodMaisVendido.qtd} unidades no total</div>
+          <div style={{fontSize:13,color:'var(--text-muted)'}}>{prodMaisVendido.qtd} unidades no período</div>
         </div>
       )}
 

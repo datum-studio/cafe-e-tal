@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -70,10 +70,10 @@
     --success: #2D6A4F; --success-bg: #D8F3DC;
     --danger: #9B2226; --danger-bg: #FFE5E5;
     --warning: #8B6914; --warning-bg: #FFF3CD;
-    --radius: 10px; --shadow: 0 2px 12px rgba(139,26,74,0.08);
+    --radius: 16px; --shadow: 0 2px 14px rgba(139,26,74,0.07);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+  body { font-family: 'Geist', 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; background: var(--cream); color: var(--text); min-height: 100vh; }
   input, select, textarea, button { font-family: inherit; }
   .app { display: flex; flex-direction: column; min-height: 100vh; }
   .topbar { background: var(--wine); color: var(--gold); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; box-shadow: 0 2px 8px rgba(0,0,0,0.18); position: sticky; top: 0; z-index: 100; }
@@ -85,18 +85,18 @@
   .sync-dot.error { background: #f87171; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .main { flex: 1; padding: 1.5rem; max-width: 960px; margin: 0 auto; width: 100%; }
-  .page-title { font-size: 20px; font-weight: 700; color: var(--wine); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 8px; }
-  .card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
-  .card-title { font-size: 15px; font-weight: 700; color: var(--wine); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--cream-dark); }
+  .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.2px; color: var(--wine); margin-bottom: 1.1rem; display: flex; align-items: center; gap: 8px; }
+  .card { background: #fff; border: 1px solid var(--cream-dark); border-radius: var(--radius); padding: 1.35rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
+  .card-title { font-size: 16px; font-weight: 700; color: var(--wine); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--cream-dark); }
   .form-row { display: grid; gap: 10px; margin-bottom: 10px; }
   .form-row.cols2 { grid-template-columns: 1fr 1fr; }
   .form-row.cols3 { grid-template-columns: 1fr 1fr 1fr; }
   .form-row.cols4 { grid-template-columns: 1fr 1fr 1fr auto; }
   .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .field input, .field select, .field textarea { width: 100%; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 14px; color: var(--text); background: var(--cream); transition: border-color 0.15s; }
+  .field input, .field select, .field textarea { width: 100%; padding: 11px 12px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; color: var(--text); background: var(--cream); transition: border-color 0.15s, box-shadow 0.15s; }
   input[type="date"] { font-family: 'Segoe UI', system-ui, sans-serif; }
-  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--wine); background: #fff; }
-  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; border: none; transition: all 0.15s; cursor: pointer; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--wine); background: #fff; box-shadow: 0 0 0 3px rgba(139,26,74,0.12); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; border: none; transition: all 0.15s; cursor: pointer; }
   .btn-primary { background: var(--wine); color: #fff; }
   .btn-primary:hover { background: var(--wine-dark); }
   .btn-gold { background: var(--gold); color: var(--wine); }
@@ -105,9 +105,12 @@
   .btn-ghost:hover { border-color: var(--wine); color: var(--wine); }
   .btn-danger { background: none; border: 1.5px solid var(--danger-bg); color: var(--danger); }
   .btn-danger:hover { background: var(--danger-bg); }
-  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-sm { padding: 6px 12px; font-size: 12.5px; border-radius: 8px; }
+  .btn-lg { padding: 14px 28px; font-size: 16px; border-radius: 999px; box-shadow: 0 4px 12px rgba(139,26,74,0.25); }
+  .btn-primary:active { transform: scale(0.98); }
+  @media (max-width: 640px) { .btn-lg { width: 100%; } }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700; }
   .badge-green { background: var(--success-bg); color: var(--success); }
   .badge-red { background: var(--danger-bg); color: var(--danger); }
   .badge-gold { background: var(--warning-bg); color: var(--warning); }
@@ -119,13 +122,13 @@
   tr:hover td { background: var(--cream); }
   .empty-state { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 14px; }
   .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 1rem; }
-  .metric { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); }
+  .metric { background: #fff; border: 1px solid var(--cream-dark); border-radius: var(--radius); padding: 1.1rem; box-shadow: var(--shadow); }
   .metric-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .metric-value { font-size: 20px; font-weight: 700; color: var(--wine); }
+  .metric-value { font-size: 22px; letter-spacing: -0.3px; font-weight: 700; color: var(--wine); }
   .metric-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-  .tab-bar { display: flex; gap: 4px; margin-bottom: 1rem; background: var(--cream-dark); padding: 4px; border-radius: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tab-bar { display: flex; gap: 4px; margin-bottom: 1rem; background: var(--cream-dark); padding: 5px; border-radius: 14px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .tab-bar::-webkit-scrollbar { display: none; }
-  .tab-btn { flex-shrink: 0; padding: 7px 12px; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; background: none; color: var(--text-muted); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .tab-btn { flex-shrink: 0; padding: 9px 14px; border: none; border-radius: 10px; font-size: 13.5px; font-weight: 600; background: none; color: var(--text-muted); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
   .tab-btn.tab-nova { background: var(--wine); color: #fff; box-shadow: 0 2px 6px rgba(139,26,74,0.3); }
   .tab-btn.tab-nova.active { background: var(--wine-dark); color: #fff; outline: 2px solid var(--gold); }
   .fab-nova { position: fixed; right: 20px; bottom: 24px; z-index: 90; background: var(--wine); color: #fff; border: 2px solid var(--gold); border-radius: 28px; padding: 14px 20px; font-size: 15px; font-weight: 700; box-shadow: 0 6px 18px rgba(139,26,74,0.4); cursor: pointer; display: flex; align-items: center; gap: 6px; }
@@ -211,15 +214,16 @@
   .chip { flex-shrink: 0; padding: 6px 12px; border-radius: 20px; border: 1.5px solid var(--border); background: #fff; color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   .chip:hover { border-color: var(--wine); color: var(--wine); }
   .chip.active { background: var(--wine); border-color: var(--wine); color: #fff; }
-  .prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 8px; max-height: 62vh; min-height: 200px; overflow-y: auto; padding: 4px 4px 4px 2px; -webkit-overflow-scrolling: touch; }
-  .prod-tile { position: relative; text-align: left; padding: 10px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--cream); cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-height: 62px; }
-  .prod-tile:hover { border-color: var(--wine); background: #fff; }
+  .prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; max-height: 70vh; min-height: 220px; overflow-y: auto; padding: 6px 6px 6px 2px; -webkit-overflow-scrolling: touch; }
+  .prod-tile { position: relative; text-align: left; padding: 14px 14px 12px; border-radius: 16px; border: 1.5px solid var(--cream-dark); background: #fff; box-shadow: 0 1px 4px rgba(139,26,74,0.06); cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 104px; transition: border-color 0.15s, background 0.15s, transform 0.1s; }
+  .prod-tile:hover { border-color: var(--wine); }
   .prod-tile:active { transform: scale(0.97); }
-  .prod-tile.sel { border-color: var(--wine); background: #F5E6ED; }
-  .prod-tile .pt-nome { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.25; }
-  .prod-tile .pt-preco { font-size: 12px; font-weight: 700; color: var(--wine); }
-  .prod-tile .pt-stk { font-size: 11px; color: var(--text-muted); }
-  .prod-tile .pt-qtd { position: absolute; top: -6px; right: -6px; background: var(--wine); color: #fff; font-size: 11px; font-weight: 700; min-width: 22px; height: 22px; border-radius: 11px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+  .prod-tile.sel { border-color: var(--wine); background: #FBF0F5; }
+  .prod-tile .pt-nome { font-size: 15px; font-weight: 600; color: var(--text); line-height: 1.25; padding-right: 30px; }
+  .prod-tile .pt-preco { font-size: 18px; font-weight: 700; color: var(--wine); margin-top: auto; padding-top: 6px; letter-spacing: -0.2px; }
+  .prod-tile .pt-stk { font-size: 11.5px; color: var(--text-muted); }
+  .prod-tile .pt-add { position: absolute; right: 10px; bottom: 10px; width: 32px; height: 32px; border-radius: 50%; background: var(--wine); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; line-height: 1; }
+  .prod-tile .pt-qtd { position: absolute; top: 10px; right: 10px; background: var(--gold); color: var(--wine-dark); font-size: 13px; font-weight: 800; min-width: 26px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0 7px; }
   .section-label { margin-bottom: 8px; font-weight: 700; font-size: 12px; color: var(--text-muted); letter-spacing: 0.5px; }
   .cart-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--cream-dark); }
   .cart-row:last-child { border-bottom: none; }
@@ -257,9 +261,8 @@
     .field input, .field select, .field textarea, .cart-price { font-size: 16px; }
     .btn { min-height: 40px; }
     .btn-sm { min-height: 36px; }
-    .prod-grid { max-height: 68vh; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-    .prod-tile { min-height: 56px; padding: 8px; }
-    .prod-tile .pt-nome { font-size: 12.5px; }
+    .prod-grid { max-height: 72vh; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .prod-tile { min-height: 112px; }
   }
 </style>
 </head>
@@ -358,6 +361,7 @@ function SeletorProdutos({ produtos, categorias, estoque, itens, onAdd }) {
               return (
                 <button key={p.id} className={'prod-tile '+(n>0?'sel':'')} onClick={()=>onAdd(p.id)}>
                   {n>0 && <span className="pt-qtd">{n}</span>}
+                  <span className="pt-add">+</span>
                   <span className="pt-nome">{p.destaque?'⭐ ':''}{p.nome}</span>
                   <span className="pt-preco">{fmt(p.venda)}</span>
                   {stk>0 && <span className="pt-stk">{stk} em estoque</span>}
@@ -1288,7 +1292,7 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
             ) : null;
           })()}
           <div style={{display:'flex',gap:8,alignItems:'flex-end',margin:'6px 0'}}>
-            <div className="field" style={{margin:0,width:140}}>
+            <div className="field" style={{margin:0,width:180}}>
               <label>Desconto</label>
               <select value={form.desconto_tipo} onChange={e=>setForm(f=>({...f,desconto_tipo:e.target.value,desconto_valor:''}))}>
                 <option value="pct">Porcentagem (%)</option>
@@ -1320,7 +1324,7 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
                 <option value="pago">Já pago</option>
               </select>
             </div>
-            <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
+            <button className="btn btn-primary btn-lg" onClick={salvar} disabled={syncing}>Registrar venda</button>
           </div>
           {form.sinal_pago && form.status!=='pago' && <div style={{fontSize:12,color:'var(--text-muted)',marginTop:8}}>Sinal de 50%: {fmt(calcTotal(form.itens,form.desconto_tipo,form.desconto_valor)*0.5)} recebido. Falta {fmt(calcTotal(form.itens,form.desconto_tipo,form.desconto_valor)*0.5)}.</div>}
         </div>
@@ -1418,7 +1422,7 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
             ) : null;
           })()}
           <div style={{display:'flex',gap:8,alignItems:'flex-end',margin:'6px 0'}}>
-            <div className="field" style={{margin:0,width:140}}>
+            <div className="field" style={{margin:0,width:180}}>
               <label>Desconto</label>
               <select value={editandoVenda.desconto_tipo} onChange={e=>setEditandoVenda(v=>({...v,desconto_tipo:e.target.value,desconto_valor:''}))}>
                 <option value="pct">Porcentagem (%)</option>
@@ -1450,7 +1454,7 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
                 <option value="pago">Já pago</option>
               </select>
             </div>
-            <button className="btn btn-primary" onClick={salvarEdicaoVenda} disabled={syncing}>Salvar alterações</button>
+            <button className="btn btn-primary btn-lg" onClick={salvarEdicaoVenda} disabled={syncing}>Salvar alterações</button>
           </div>
         </div>
       )}
@@ -1705,7 +1709,7 @@ function Feirinha({ syncing, setSyncing }) {
           <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens))}</span></div>
           <div className="total-row"><span style={{fontSize:12,color:'var(--text-muted)'}}>Lucro estimado (vendas)</span><span style={{color:'var(--success)',fontSize:13,fontWeight:600}}>{fmt(calcLucro(form.itens))}</span></div>
           <div className="separator"/>
-          <button className="btn btn-primary" onClick={salvar} disabled={syncing||!sessaoAtiva}>Registrar venda</button>
+          <button className="btn btn-primary btn-lg" onClick={salvar} disabled={syncing||!sessaoAtiva}>Registrar venda</button>
         </div>
       )}
 

@@ -185,17 +185,25 @@
     .sidebar { display: none; }
     .bottom-nav { display: flex !important; }
     .content-area { padding: 1rem; padding-bottom: 16px; }
-    footer.no-print { margin-bottom: 64px; }
+    footer.no-print { margin-bottom: 76px; }
   }
-  @media (max-width: 640px) { .fab-nova { bottom: 78px; right: 14px; } }
-  .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border); z-index: 100; padding: 6px 0 env(safe-area-inset-bottom); }
-  .bottom-nav-inner { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 4px; }
-  .bottom-nav-inner::-webkit-scrollbar { display: none; }
-  .bnav-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 8px; border: none; background: none; cursor: pointer; border-radius: 8px; min-width: 44px; }
-  .bnav-btn .bnav-icon { font-size: 20px; }
-  .bnav-btn .bnav-label { font-size: 9px; font-weight: 600; color: var(--text-muted); }
-  .bnav-btn.active .bnav-label { color: var(--wine); }
-  .bnav-btn.active .bnav-icon { filter: none; }
+  @media (max-width: 640px) { .fab-nova { bottom: 88px; right: 14px; } }
+  .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border); box-shadow: 0 -2px 10px rgba(0,0,0,0.06); z-index: 100; padding: 2px 0 env(safe-area-inset-bottom); }
+  .bottom-nav-inner { display: grid; grid-template-columns: repeat(5, 1fr); padding: 0 4px; }
+  .bnav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px 2px; border: none; background: none; cursor: pointer; min-height: 62px; -webkit-tap-highlight-color: transparent; }
+  .bnav-btn .bnav-icon { font-size: 26px; line-height: 1; width: 56px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 16px; transition: background 0.15s; }
+  .bnav-btn .bnav-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+  .bnav-btn.active .bnav-icon { background: #F5E6ED; }
+  .bnav-btn.active .bnav-label { color: var(--wine); font-weight: 700; }
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 98; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: calc(66px + env(safe-area-inset-bottom)); background: #fff; border-radius: 18px 18px 0 0; padding: 14px 16px 18px; z-index: 99; box-shadow: 0 -6px 24px rgba(0,0,0,0.2); }
+  .sheet-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 12px; }
+  .sheet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .sheet-tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 6px; border: 1.5px solid var(--border); border-radius: 14px; background: var(--cream); cursor: pointer; }
+  .sheet-tile.active { border-color: var(--wine); background: #F5E6ED; }
+  .sheet-tile .st-icon { font-size: 30px; line-height: 1; }
+  .sheet-tile .st-label { font-size: 14px; font-weight: 700; color: var(--text); }
+  .sheet-tile .st-sub { font-size: 11px; color: var(--text-muted); text-align: center; }
 
   :focus-visible { outline: 2px solid var(--gold-dark); outline-offset: 2px; }
   .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 8px; scrollbar-width: none; }
@@ -2340,7 +2348,7 @@ function Dashboard({ syncing, setSyncing }) {
   function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function addMeses(ym,n){ const a=ym.split('-').map(Number); const d=new Date(a[0],a[1]-1+n,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
   function rangeMes(ym){ const a=ym.split('-').map(Number); return {de:ymd(new Date(a[0],a[1]-1,1)), ate:ymd(new Date(a[0],a[1],0))}; }
-  function rotMes(ym){ const a=ym.split('-'); return MESES[parseInt(a[1])-1]+' de '+a[0]; }
+  function rotMes(ym){ const a=ym.split('-'); const m=MESES[parseInt(a[1])-1]; return m.charAt(0).toUpperCase()+m.slice(1)+' de '+a[0]; }
   function dbr(d){ return d? d.split('-').reverse().join('/') : ''; }
 
   // Faixa atual e anterior (para comparação)
@@ -2508,7 +2516,7 @@ function Dashboard({ syncing, setSyncing }) {
           </div>
         </div>
         <div style={{fontSize:13,color:'var(--text-muted)',marginTop:8}}>
-          Exibindo: <b style={{color:'var(--wine)',textTransform:'capitalize'}}>{partSel ? 'Feira selecionada (só feirinha)' : faixa.rotulo}</b>
+          Exibindo: <b style={{color:'var(--wine)'}}>{partSel ? 'Feira selecionada (só feirinha)' : faixa.rotulo}</b>
           {anterior && <span> · comparando com {faixa.rotAnt}</span>}
         </div>
       </div>
@@ -3327,6 +3335,7 @@ function App() {
   function setPage(id){ setPageState(id); lsSet('pagina',id); window.scrollTo(0,0); }
   const [syncing, setSyncing] = useState(false);
   const [novaSignal, setNovaSignal] = useState(0);
+  const [maisAberto, setMaisAberto] = useState(false);
   function novaVenda(){ setNovaSignal(n=>n+1); setPage('vendas'); }
 
   useEffect(()=>{
@@ -3411,14 +3420,35 @@ function App() {
       {page!=='vendas' && page!=='feirinha' && <button className="fab-nova no-print" onClick={novaVenda}>+ Nova venda</button>}
       <nav className="bottom-nav no-print">
         <div className="bottom-nav-inner">
-          {pages.map(p=>(
-            <button key={p.id} className={`bnav-btn ${page===p.id?'active':''}`} onClick={()=>setPage(p.id)}>
+          {pages.filter(p=>['dashboard','vendas','feirinha','produtos'].includes(p.id)).map(p=>(
+            <button key={p.id} className={`bnav-btn ${(page===p.id&&!maisAberto)?'active':''}`} onClick={()=>{setMaisAberto(false);setPage(p.id);}}>
               <span className="bnav-icon">{p.icon}</span>
               <span className="bnav-label">{p.short}</span>
             </button>
           ))}
+          <button className={`bnav-btn ${(maisAberto||!['dashboard','vendas','feirinha','produtos'].includes(page))?'active':''}`} onClick={()=>setMaisAberto(v=>!v)}>
+            <span className="bnav-icon">☰</span>
+            <span className="bnav-label">Mais</span>
+          </button>
         </div>
       </nav>
+      {maisAberto && (
+        <div className="no-print">
+          <div className="sheet-bg" onClick={()=>setMaisAberto(false)}/>
+          <div className="sheet">
+            <div className="sheet-grip"/>
+            <div className="sheet-grid">
+              {pages.filter(p=>!['dashboard','vendas','feirinha','produtos'].includes(p.id)).map(p=>(
+                <button key={p.id} className={`sheet-tile ${page===p.id?'active':''}`} onClick={()=>{setPage(p.id);setMaisAberto(false);}}>
+                  <span className="st-icon">{p.icon}</span>
+                  <span className="st-label">{p.short}</span>
+                  <span className="st-sub">{p.sub}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

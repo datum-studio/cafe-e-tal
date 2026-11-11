@@ -130,6 +130,12 @@
   .tab-btn.tab-nova.active { background: var(--wine-dark); color: #fff; outline: 2px solid var(--gold); }
   .fab-nova { position: fixed; right: 20px; bottom: 24px; z-index: 90; background: var(--wine); color: #fff; border: 2px solid var(--gold); border-radius: 28px; padding: 14px 20px; font-size: 15px; font-weight: 700; box-shadow: 0 6px 18px rgba(139,26,74,0.4); cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .fab-nova:hover { background: var(--wine-dark); }
+  .vcard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+  .vcard { border: 1.5px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; display: flex; flex-direction: column; gap: 6px; }
+  .vcard.atraso { border-color: var(--danger); }
+  .dia-head { font-weight: 700; font-size: 13px; color: var(--wine); margin: 16px 0 8px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--gold); padding-bottom: 4px; }
+  .dia-head.atraso { color: var(--danger); border-color: var(--danger); }
+  .dia-head.hoje { background: #F5E6ED; padding: 6px 8px; border-radius: 6px 6px 0 0; }
   .scroll-y { max-height: 62vh; overflow-y: auto; border: 1px solid var(--cream-dark); border-radius: 8px; }
   .scroll-y th { position: sticky; top: 0; background: #fff; z-index: 1; }
   .tab-btn.active { background: #fff; color: var(--wine); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
@@ -277,8 +283,9 @@ function subscribeCol(colName, callback) {
 function fmt(n) { return Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function pct(a,b) { return b>0?((a/b)*100).toFixed(1)+'%':'-'; }
 function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function hoje() { return new Date().toISOString().slice(0,10); }
-function primeiroDiaMes() { const d=new Date();d.setDate(1);return d.toISOString().slice(0,10); }
+function ymdLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function hoje() { return ymdLocal(new Date()); }
+function primeiroDiaMes() { const d=new Date(); d.setDate(1); return ymdLocal(d); }
 
 // ── useFirestore hook ─────────────────────────────────────────────
 function useFirestore(colName) {
@@ -974,6 +981,68 @@ function Compradores({ syncing, setSyncing }) {
 }
 
 // ── VENDAS ────────────────────────────────────────────────────────
+function pagtoEstado(v){ return v.status==='pago' ? 'pago' : (v.sinal_pago ? 'sinal' : 'pendente'); }
+function aplicaPagto(e){ return e==='pago' ? {status:'pago',sinal_pago:false} : (e==='sinal' ? {status:'pendente',sinal_pago:true} : {status:'pendente',sinal_pago:false}); }
+function saldoVenda(v){ if(v.status==='pago') return 0; return (v.total||0)*(v.sinal_pago?0.5:1); }
+function rotuloDia(d){
+  if(!d) return 'Sem data de entrega';
+  const h = hoje();
+  const am = new Date(); am.setDate(am.getDate()+1);
+  const dia = new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long'});
+  const cap = dia.charAt(0).toUpperCase()+dia.slice(1);
+  if(d===h) return 'Hoje - '+fdata(d);
+  if(d===ymdLocal(am)) return 'Amanhã - '+fdata(d);
+  return cap+' - '+fdata(d);
+}
+
+function BadgePagto({ v, onClick }) {
+  const e = pagtoEstado(v);
+  const cls = e==='pago' ? 'badge-green' : 'badge-gold';
+  const txt = e==='pago' ? '✅ Pago' : (e==='sinal' ? '💰 Sinal 50% pago' : '⏳ Pendente');
+  return <span className={'badge '+cls} style={onClick?{cursor:'pointer'}:null} onClick={onClick} title={onClick?'Toque para alternar pago/pendente':''}>{txt}</span>;
+}
+
+// Cartão de venda (sem rolagem lateral)
+function VendaCard({ v, comp, vend, produtos, onPago, onEntregue, onEditar, onNota, onExcluir, modo }) {
+  const saldo = saldoVenda(v);
+  const atrasada = !v.entregue && v.data_entrega && v.data_entrega < hoje();
+  const itensTxt = (v.itens||[]).map(it=>{ const p=produtos.find(x=>x.id===it.produto_id); return (p?p.nome:'?')+' x'+it.qtd; }).join(', ');
+  return (
+    <div className={'vcard '+(atrasada?'atraso':'')}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:15}}>{comp?comp.nome:'-'}</div>
+          <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?comp.cidade:''}</div>
+        </div>
+        <div style={{textAlign:'right',flexShrink:0}}>
+          <div style={{fontWeight:700,color:'var(--wine)',fontSize:16}}>{fmt(v.total)}</div>
+          {saldo>0 && saldo<(v.total||0) && <div style={{fontSize:11,color:'var(--warning)',fontWeight:600}}>falta {fmt(saldo)}</div>}
+        </div>
+      </div>
+      {v.data_entrega && (
+        <div style={{fontSize:13,fontWeight:600,color:atrasada?'var(--danger)':'var(--text)'}}>
+          🚚 {fdata(v.data_entrega)}{v.hora_entrega?' às '+v.hora_entrega:''}{atrasada?' · atrasada':''}
+        </div>
+      )}
+      <div style={{fontSize:12,color:'var(--text-muted)'}}>Venda de {fdata(v.data)}{vend?' · '+vend.nome:''}</div>
+      {itensTxt && <div style={{fontSize:12}}>{itensTxt}</div>}
+      {v.obs && <div style={{fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>{v.obs}</div>}
+      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        <BadgePagto v={v} onClick={onPago}/>
+        <span className={'badge '+(v.entregue?'badge-green':'badge-red')} style={onEntregue?{cursor:'pointer'}:null} onClick={onEntregue} title={v.entregue?'Toque para desmarcar entrega':'Toque para marcar como entregue'}>
+          {v.entregue?'✅ Entregue':'🚚 Não entregue'}
+        </span>
+      </div>
+      <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:2}}>
+        {modo==='entregas' && !v.entregue && <button className="btn btn-primary btn-sm" onClick={onEntregue}>✅ Marcar entregue</button>}
+        {onEditar && <button className="btn btn-ghost btn-sm" onClick={onEditar}>✏ Editar</button>}
+        {onNota && <button className="btn btn-gold btn-sm" onClick={onNota}>📋 Nota</button>}
+        {onExcluir && <button className="btn btn-danger btn-sm" onClick={onExcluir}>✕</button>}
+      </div>
+    </div>
+  );
+}
+
 function Vendas({ syncing, setSyncing, novaSignal }) {
   const { arr: produtos } = useFirestore('produtos');
   const { arr: vendedores } = useFirestore('vendedores');
@@ -983,7 +1052,7 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
   const { arr: cidadesV } = useFirestore('cidades');
   const { docs: estoqueDelivery } = useFirestore('estoque_delivery');
   const [tab, setTab] = useState('nova');
-  const [form, setForm] = useState({comprador_id:'',vendedor_id:'',data:hoje(),itens:[],obs:'',status:'pendente',desconto_tipo:'pct',desconto_valor:''});
+  const [form, setForm] = useState({comprador_id:'',vendedor_id:'',data:hoje(),itens:[],obs:'',status:'pendente',sinal_pago:false,data_entrega:'',hora_entrega:'',desconto_tipo:'pct',desconto_valor:''});
   useEffect(()=>{
     if(form.vendedor_id || !vendedores.length) return;
     const ult = lsGet('ultimo_vendedor','');
@@ -995,6 +1064,9 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
   const [editandoVenda, setEditandoVenda] = useState(null);
   useEffect(()=>{ if(novaSignal){ setEditandoVenda(null); setTab('nova'); } },[novaSignal]);
   const [filtro, setFiltro] = useState('todos');
+  const [buscaV, setBuscaV] = useState('');
+  const [limiteV, setLimiteV] = useState(30);
+  const [filtroEnt, setFiltroEnt] = useState('todas');
 
   function showAlert(tipo,msg){setAlert({tipo,msg});setTimeout(()=>setAlert(null),2500);}
   function addItem(){setForm(f=>({...f,itens:[...f.itens,{produto_id:'',qtd:1}]}));}
@@ -1041,7 +1113,7 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
         const atual = estoqueDelivery[it.produto_id]?.qtd||0;
         await saveDoc('estoque_delivery', it.produto_id, {qtd:Math.max(0,atual-(parseInt(it.qtd)||0))});
       }
-      setForm({comprador_id:'',vendedor_id:form.vendedor_id,data:hoje(),itens:[],obs:'',status:'pendente',desconto_tipo:'pct',desconto_valor:'',entregue:false});
+      setForm({comprador_id:'',vendedor_id:form.vendedor_id,data:hoje(),itens:[],obs:'',status:'pendente',sinal_pago:false,data_entrega:'',hora_entrega:'',desconto_tipo:'pct',desconto_valor:'',entregue:false});
       showAlert('success','Venda registrada!');
       setTab('lista');
     } catch(e){ showAlert('danger','Erro ao salvar.'); }
@@ -1050,7 +1122,13 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
 
   async function togglePago(venda) {
     setSyncing(true);
-    await saveDoc('vendas', venda.id, {...venda, status:venda.status==='pago'?'pendente':'pago'});
+    await saveDoc('vendas', venda.id, {...venda, ...aplicaPagto(venda.status==='pago'?'pendente':'pago')});
+    setSyncing(false);
+  }
+
+  async function marcarSinal(venda) {
+    setSyncing(true);
+    await saveDoc('vendas', venda.id, {...venda, ...aplicaPagto('sinal')});
     setSyncing(false);
   }
 
@@ -1076,6 +1154,9 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
       itens: venda.itens ? [...venda.itens.map(it=>({...it}))] : [],
       obs: venda.obs||'',
       status: venda.status,
+      sinal_pago: !!venda.sinal_pago,
+      data_entrega: venda.data_entrega||'',
+      hora_entrega: venda.hora_entrega||'',
       desconto_tipo: venda.desconto_tipo||'pct',
       desconto_valor: venda.desconto_valor||'',
     });
@@ -1130,7 +1211,12 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
     }
     t+=`💰 *TOTAL: ${fmt(venda.total)}*\n`;
     if(venda.obs) t+=`📝 ${venda.obs}\n`;
+    if(venda.data_entrega) t+=`🚚 Entrega: ${fdata(venda.data_entrega)}${venda.hora_entrega?' às '+venda.hora_entrega:''}\n`;
     if(venda.status==='pago') t+=`\n✅ *PAGAMENTO CONFIRMADO*\n`;
+    if(venda.status!=='pago' && venda.sinal_pago) {
+      t+=`\n💰 Sinal de 50% recebido: ${fmt(venda.total*0.5)}\n`;
+      t+=`⏳ *Falta pagar: ${fmt(venda.total*0.5)}*\n`;
+    }
     if(venda.status!=='pago') t+=`\n🔑 *Chave Pix:* cafeetal01@gmail.com\n`;
     t+=`\nObrigada pela preferência! 🙏☕`;
     setNotaModal({texto:t,venda,comp});
@@ -1148,13 +1234,13 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
       <div className="page-title">🛒 Vendas</div>
       <div className="tab-bar">
         <button className={`tab-btn tab-nova ${tab==='nova'?'active':''}`} onClick={()=>setTab('nova')}>+ Nova venda</button>
-        <button className={`tab-btn ${tab==='lista'?'active':''}`} onClick={()=>setTab('lista')}>Histórico</button>
         <button className={`tab-btn ${tab==='pendentes'?'active':''}`} onClick={()=>setTab('pendentes')}>
           Pagamentos {pendentesQtd>0&&<span className="badge badge-gold" style={{marginLeft:4}}>{pendentesQtd}</span>}
         </button>
         <button className={`tab-btn ${tab==='entregas'?'active':''}`} onClick={()=>setTab('entregas')}>
           Entregas {vendasNaoEntregues>0&&<span className="badge badge-gold" style={{marginLeft:4}}>{vendasNaoEntregues}</span>}
         </button>
+        <button className={`tab-btn ${tab==='lista'?'active':''}`} onClick={()=>setTab('lista')}>Histórico</button>
         {editandoVenda&&<button className={`tab-btn ${tab==='editar'?'active':''}`} onClick={()=>setTab('editar')} style={{color:'var(--warning)'}}>✏ Editando</button>}
       </div>
 
@@ -1211,53 +1297,79 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
           </div>
           <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(form.itens,form.desconto_tipo,form.desconto_valor))}</span></div>
           <div className="separator"/>
+          <div className="section-label">ENTREGA E PAGAMENTO</div>
+          <div className="form-row cols2">
+            <div className="field"><label>Data de entrega (agendada)</label><input type="date" value={form.data_entrega||''} onChange={e=>setForm(f=>({...f,data_entrega:e.target.value}))}/></div>
+            <div className="field"><label>Horário (opcional)</label><input type="time" value={form.hora_entrega||''} onChange={e=>setForm(f=>({...f,hora_entrega:e.target.value}))}/></div>
+          </div>
           <div className="form-row"><div className="field"><label>Observações</label><textarea value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))} rows={2} placeholder="Ex: Entregar à tarde..."/></div></div>
-          <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
+          <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap'}}>
             <div className="field" style={{margin:0}}>
               <label>Pagamento</label>
-              <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}>
+              <select value={pagtoEstado(form)} onChange={e=>setForm(f=>({...f,...aplicaPagto(e.target.value)}))}>
                 <option value="pendente">Aguardando pagamento</option>
+                <option value="sinal">Sinal de 50% pago</option>
                 <option value="pago">Já pago</option>
-              </select>
-            </div>
-            <div className="field" style={{margin:0}}>
-              <label>Entrega</label>
-              <select value={form.entregue?'sim':'nao'} onChange={e=>setForm(f=>({...f,entregue:e.target.value==='sim'}))}>
-                <option value="nao">Não entregue</option>
-                <option value="sim">Já entregue</option>
               </select>
             </div>
             <button className="btn btn-primary" onClick={salvar} disabled={syncing}>Registrar venda</button>
           </div>
+          {form.sinal_pago && form.status!=='pago' && <div style={{fontSize:12,color:'var(--text-muted)',marginTop:8}}>Sinal de 50%: {fmt(calcTotal(form.itens,form.desconto_tipo,form.desconto_valor)*0.5)} recebido. Falta {fmt(calcTotal(form.itens,form.desconto_tipo,form.desconto_valor)*0.5)}.</div>}
         </div>
       )}
 
-      {tab==='entregas'&&(
+      {tab==='entregas'&&(()=>{
+        const h = hoje();
+        const em7 = new Date(); em7.setDate(em7.getDate()+7); const lim7 = ymdLocal(em7);
+        const todas = vendas.filter(v=>!v.entregue);
+        const cont = {
+          todas: todas.length,
+          atrasadas: todas.filter(v=>v.data_entrega && v.data_entrega<h).length,
+          hoje: todas.filter(v=>v.data_entrega===h).length,
+          prox: todas.filter(v=>v.data_entrega && v.data_entrega>=h && v.data_entrega<=lim7).length,
+          semdata: todas.filter(v=>!v.data_entrega).length,
+        };
+        const lista = todas.filter(v=>{
+          if(filtroEnt==='atrasadas') return v.data_entrega && v.data_entrega<h;
+          if(filtroEnt==='hoje') return v.data_entrega===h;
+          if(filtroEnt==='prox') return v.data_entrega && v.data_entrega>=h && v.data_entrega<=lim7;
+          if(filtroEnt==='semdata') return !v.data_entrega;
+          return true;
+        });
+        const grupos = {};
+        lista.forEach(v=>{ const k=v.data_entrega||''; (grupos[k]=grupos[k]||[]).push(v); });
+        const chaves = Object.keys(grupos).filter(k=>k!=='').sort();
+        if(grupos['']) chaves.push('');
+        const chips = [['todas','Todas'],['atrasadas','Atrasadas'],['hoje','Hoje'],['prox','Próx. 7 dias'],['semdata','Sem data']];
+        return (
         <div className="card">
-          {vendas.filter(v=>!v.entregue).length===0
-            ?<div className="empty-state">🎉 Todas as vendas foram entregues!</div>
-            :[...vendas.filter(v=>!v.entregue)].sort((a,b)=>a.data?.localeCompare(b.data)).map(v=>{
-              const comp=compradores.find(c=>c.id===v.comprador_id);
-              return (
-                <div key={v.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--cream-dark)',flexWrap:'wrap',gap:8}}>
-                  <div>
-                    <div style={{fontWeight:700}}>{comp?.nome||'-'}</div>
-                    <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?.cidade} · {fdata(v.data)}</div>
-                    <div style={{fontSize:12,marginTop:2}}>
-                      {v.itens?.map((it,i)=>{const p=produtos.find(x=>x.id===it.produto_id);return <span key={i} style={{marginRight:6}}>{p?.nome||'?'} ×{it.qtd}</span>;})}
+          <div className="chips">
+            {chips.map(c=><button key={c[0]} className={'chip '+(filtroEnt===c[0]?'active':'')} onClick={()=>setFiltroEnt(c[0])}>{c[1]} ({cont[c[0]]})</button>)}
+          </div>
+          {lista.length===0
+            ? <div className="empty-state">{todas.length===0?'🎉 Todas as vendas foram entregues!':'Nenhuma entrega neste filtro'}</div>
+            : chaves.map(k=>{
+                const itens = [...grupos[k]].sort((a,b)=>(a.hora_entrega||'99:99').localeCompare(b.hora_entrega||'99:99'));
+                const atraso = k && k<h;
+                return (
+                  <div key={k||'sem'}>
+                    <div className={'dia-head '+(atraso?'atraso':'')+(k===h?' hoje':'')}>
+                      <span>{atraso?'⚠ Atrasadas - ':''}{rotuloDia(k)}</span>
+                      <span style={{fontWeight:600,fontSize:12}}>{itens.length} entrega{itens.length!==1?'s':''}</span>
+                    </div>
+                    <div className="vcard-grid">
+                      {itens.map(v=>(
+                        <VendaCard key={v.id} v={v} modo="entregas" comp={compradores.find(c=>c.id===v.comprador_id)} vend={vendedores.find(x=>x.id===v.vendedor_id)} produtos={produtos}
+                          onPago={()=>togglePago(v)} onEntregue={()=>toggleEntregue(v)} onEditar={()=>abrirEdicao(v)} onNota={()=>gerarNota(v)}/>
+                      ))}
                     </div>
                   </div>
-                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                    <span style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</span>
-                    <span className={`badge ${v.status==='pago'?'badge-green':'badge-gold'}`}>{v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span>
-                    <button className="btn btn-primary btn-sm" onClick={()=>toggleEntregue(v)}>✅ Marcar entregue</button>
-                  </div>
-                </div>
-              );
-            })
+                );
+              })
           }
         </div>
-      )}
+        );
+      })()}
 
       {tab==='editar'&&editandoVenda&&(
         <div className="card">
@@ -1315,12 +1427,18 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
           </div>
           <div className="total-row grand"><span>TOTAL</span><span>{fmt(calcTotal(editandoVenda.itens,editandoVenda.desconto_tipo,editandoVenda.desconto_valor))}</span></div>
           <div className="separator"/>
+          <div className="section-label">ENTREGA E PAGAMENTO</div>
+          <div className="form-row cols2">
+            <div className="field"><label>Data de entrega (agendada)</label><input type="date" value={editandoVenda.data_entrega||''} onChange={e=>setEditandoVenda(v=>({...v,data_entrega:e.target.value}))}/></div>
+            <div className="field"><label>Horário (opcional)</label><input type="time" value={editandoVenda.hora_entrega||''} onChange={e=>setEditandoVenda(v=>({...v,hora_entrega:e.target.value}))}/></div>
+          </div>
           <div className="form-row"><div className="field"><label>Observações</label><textarea value={editandoVenda.obs} onChange={e=>setEditandoVenda(v=>({...v,obs:e.target.value}))} rows={2}/></div></div>
-          <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
+          <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap'}}>
             <div className="field" style={{margin:0}}>
               <label>Pagamento</label>
-              <select value={editandoVenda.status} onChange={e=>setEditandoVenda(v=>({...v,status:e.target.value}))}>
+              <select value={pagtoEstado(editandoVenda)} onChange={e=>setEditandoVenda(v=>({...v,...aplicaPagto(e.target.value)}))}>
                 <option value="pendente">Aguardando pagamento</option>
+                <option value="sinal">Sinal de 50% pago</option>
                 <option value="pago">Já pago</option>
               </select>
             </div>
@@ -1329,52 +1447,34 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
         </div>
       )}
 
-      {tab==='lista'&&(
+      {tab==='lista'&&(()=>{
+        const q = buscaV.trim().toLowerCase();
+        const ordenadas = [...vendasFiltradas].filter(v=>{
+          if(!q) return true;
+          const c = compradores.find(x=>x.id===v.comprador_id);
+          return c && ((c.nome||'').toLowerCase().includes(q) || (c.cidade||'').toLowerCase().includes(q));
+        }).sort((a,b)=>(b.data||'').localeCompare(a.data||'') || (b.criado_em||'').localeCompare(a.criado_em||''));
+        const visiveis = ordenadas.slice(0,limiteV);
+        return (
         <div className="card">
-          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
-            {['todos','pago','pendente'].map(f=>(
-              <button key={f} className={`btn btn-sm ${filtro===f?'btn-primary':'btn-ghost'}`} onClick={()=>setFiltro(f)}>
-                {f==='todos'?'Todos':f==='pago'?'Pagos':'Pendentes'}
-              </button>
+          <input value={buscaV} onChange={e=>{setBuscaV(e.target.value);setLimiteV(30);}} placeholder="Buscar por comprador ou cidade..." style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:16,background:'var(--cream)',marginBottom:8}}/>
+          <div className="chips">
+            {[['todos','Todos'],['pago','Pagos'],['pendente','Pendentes']].map(f=>(
+              <button key={f[0]} className={'chip '+(filtro===f[0]?'active':'')} onClick={()=>{setFiltro(f[0]);setLimiteV(30);}}>{f[1]}</button>
             ))}
           </div>
-          <div className="scroll-x">
-            <table>
-              <thead><tr><th>Data</th><th>Comprador</th><th>Vendedor</th><th>Total</th><th>Pagamento</th><th>Entrega</th><th></th></tr></thead>
-              <tbody>
-                {vendasFiltradas.length===0&&<tr><td colSpan={7}><div className="empty-state">Nenhuma venda encontrada</div></td></tr>}
-                {[...vendasFiltradas].sort((a,b)=>b.data?.localeCompare(a.data)).map(v=>{
-                  const comp=compradores.find(c=>c.id===v.comprador_id);
-                  const vend=vendedores.find(x=>x.id===v.vendedor_id);
-                  return (
-                    <tr key={v.id}>
-                      <td style={{color:'var(--text-muted)'}}>{fdata(v.data)}</td>
-                      <td style={{fontWeight:600}}>{comp?.nome||'-'}</td>
-                      <td style={{color:'var(--text-muted)'}}>{vend?.nome||'-'}</td>
-                      <td style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</td>
-                      <td>
-                        <span className={`badge ${v.status==='pago'?'badge-green':'badge-gold'}`} style={{cursor:'pointer'}} onClick={()=>togglePago(v)} title="Clique para alternar">
-                          {v.status==='pago'?'✅ Pago':'⏳ Pendente'}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${v.entregue?'badge-green':'badge-red'}`} style={{cursor:'pointer'}} onClick={()=>toggleEntregue(v)} title={v.entregue?'Clique para desmarcar entrega':'Clique para marcar como entregue'}>
-                          {v.entregue?'✅ Entregue':'🚚 Não entregue'}
-                        </span>
-                      </td>
-                      <td style={{display:'flex',gap:4}}>
-                        <button className="btn btn-ghost btn-sm" onClick={()=>abrirEdicao(v)}>✏</button>
-                        <button className="btn btn-gold btn-sm" onClick={()=>gerarNota(v)}>📋 Nota</button>
-                        <button className="btn btn-danger btn-sm" onClick={()=>excluirVenda(v.id)}>✕</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:8}}>{ordenadas.length} venda{ordenadas.length!==1?'s':''} · mais recentes primeiro</div>
+          {ordenadas.length===0 && <div className="empty-state">Nenhuma venda encontrada</div>}
+          <div className="vcard-grid">
+            {visiveis.map(v=>(
+              <VendaCard key={v.id} v={v} comp={compradores.find(c=>c.id===v.comprador_id)} vend={vendedores.find(x=>x.id===v.vendedor_id)} produtos={produtos}
+                onPago={()=>togglePago(v)} onEntregue={()=>toggleEntregue(v)} onEditar={()=>abrirEdicao(v)} onNota={()=>gerarNota(v)} onExcluir={()=>excluirVenda(v.id)}/>
+            ))}
           </div>
+          {ordenadas.length>limiteV && <div style={{textAlign:'center',marginTop:12}}><button className="btn btn-ghost" onClick={()=>setLimiteV(n=>n+30)}>Mostrar mais ({ordenadas.length-limiteV})</button></div>}
         </div>
-      )}
+        );
+      })()}
 
       {tab==='pendentes'&&(
         <div className="card">
@@ -1389,8 +1489,12 @@ function Vendas({ syncing, setSyncing, novaSignal }) {
                     <div style={{fontSize:12,color:'var(--text-muted)'}}>{comp?.cidade} • {fdata(v.data)}</div>
                   </div>
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                    <span style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</span>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontWeight:700,color:'var(--wine)'}}>{fmt(v.total)}</div>
+                      {v.sinal_pago && <div style={{fontSize:11,color:'var(--warning)',fontWeight:600}}>💰 sinal pago · falta {fmt(saldoVenda(v))}</div>}
+                    </div>
                     <button className="btn btn-gold btn-sm" onClick={()=>gerarNota(v)}>📋 Nota</button>
+                    {!v.sinal_pago && <button className="btn btn-ghost btn-sm" onClick={()=>marcarSinal(v)}>💰 Sinal 50%</button>}
                     <button className="btn btn-ghost btn-sm" onClick={()=>togglePago(v)}>✅ Marcar pago</button>
                   </div>
                 </div>
@@ -2292,7 +2396,7 @@ function Dashboard({ syncing, setSyncing }) {
     const lucroDelivery = vd.reduce((a,v)=>a+(v.lucro||0),0);
     const lucroFeiras = Math.max(0, fe.reduce((a,f)=>a+(f.lucro||0),0) - insc);
     const pend = vd.filter(v=>v.status==='pendente');
-    return {vd:vd, fe:fe, totalVendas:totalVendas, totalFeiras:totalFeiras, total:totalVendas+totalFeiras, lucro:lucroDelivery+lucroFeiras, pendentes:pend.reduce((a,v)=>a+(v.total||0),0), pendentesQtd:pend.length};
+    return {vd:vd, fe:fe, totalVendas:totalVendas, totalFeiras:totalFeiras, total:totalVendas+totalFeiras, lucro:lucroDelivery+lucroFeiras, pendentes:pend.reduce((a,v)=>a+saldoVenda(v),0), pendentesQtd:pend.length};
   }
 
   // Detectar vendas com lucro desatualizado (sem desconto aplicado)
